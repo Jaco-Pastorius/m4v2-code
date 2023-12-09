@@ -31,7 +31,7 @@ class DriveController(Node):
 
         # roboclaw stuff
         self.address = 0x80
-        self.rc = Roboclaw("/dev/ttyACM1",115200)
+        self.rc = Roboclaw("/dev/ttyACM0",115200)
         self.rc.Open()
 
     def listener_callback(self, msg):
@@ -39,18 +39,13 @@ class DriveController(Node):
         self.turn_speed_in  = msg.values[0]
 
     def timer_callback(self):
-        self.drive_speed = self.normalize(self.drive_speed_in)
-        motor_speed = self.map_speed(abs(self.drive_speed))
+        lin_vel = self.map_speed(self.normalize(self.drive_speed_in))
+        ang_vel = self.map_speed(self.normalize(self.turn_speed_in))
 
-        self.get_logger().info(f"motor_speed({motor_speed})")
-        if (self.drive_speed > 0): # go up
-            if motor_speed == 127: 
-                motor_speed = 126 # weird bug not sure why this is needed
-            self.rc.BackwardM1(self.address, motor_speed)
-            self.rc.ForwardM2(self.address, motor_speed)
-        else:
-            self.rc.BackwardM2(self.address, motor_speed)
-            self.rc.ForwardM1(self.address, motor_speed)
+        self.get_logger().info(f"lin_vel, ang_vel: ({lin_vel},{ang_vel})")
+
+        self.move_right_wheel(lin_vel + ang_vel)
+        self.move_left_wheel(lin_vel - ang_vel)
 
     def normalize(self,drive_speed_in):
         return (drive_speed_in-self.drive_speed_dead)/(self.drive_speed_max-self.drive_speed_dead)
@@ -61,6 +56,27 @@ class DriveController(Node):
     def on_shutdown(self):
         self.rc._port.close()
         self.get_logger().info("port closed !")
+
+    def move_right_wheel(self, speed):
+        if speed > 0:
+            if speed >= 127:
+                speed = 126
+            self.rc.BackwardM1(self.address, abs(speed))
+        else:
+            if speed <= -127:
+                speed = -126
+            self.rc.ForwardM1(self.address, abs(speed))
+
+
+    def move_left_wheel(self, speed):
+        if speed > 0:
+            if speed >= 127:
+                speed = 126
+            self.rc.ForwardM2(self.address, abs(speed))
+        else:
+            if speed <= -127:
+                speed = -126
+            self.rc.BackwardM2(self.address, abs(speed))
 
 
 def main(args=None):

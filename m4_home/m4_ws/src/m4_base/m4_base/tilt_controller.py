@@ -37,7 +37,7 @@ class TiltController(Node):
 
         # roboclaw stuff
         self.address = 0x80
-        self.rc = Roboclaw("/dev/ttyACM0",115200)
+        self.rc = Roboclaw("/dev/ttyACM1",115200)
         self.rc.Open()
 
     def listener_callback(self, msg):
@@ -52,9 +52,9 @@ class TiltController(Node):
         if (self.tilt_speed < 0): # go up
             if motor_speed == 127: 
                 motor_speed = 126 # weird bug not sure why this is needed
-            self.rc.BackwardM2(self.address, motor_speed)
-        else:
             self.rc.ForwardM2(self.address, motor_speed)
+        else:
+            self.rc.BackwardM2(self.address, motor_speed)
         # else:
             # if tilt speed is zero do a position hold
             # self.rc.SetEncM1(self.address,0)
