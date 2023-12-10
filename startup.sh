@@ -4,9 +4,9 @@
 # source /home/m4version2/.profile
 # source /home/m4version2/.bashrc
 
-echo "Going to /home/m4version2/m4v2-firmware"
+echo "Going to /home/m4version2/m4v2-code"
 
-cd /home/m4version2/m4v2-firmware
+cd /home/m4version2/m4v2-code
 
 echo "Creating two tmux sessions (interface, control)"
 

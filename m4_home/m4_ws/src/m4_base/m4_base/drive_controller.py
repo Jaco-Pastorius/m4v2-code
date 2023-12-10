@@ -42,7 +42,7 @@ class DriveController(Node):
         lin_vel = self.map_speed(self.normalize(self.drive_speed_in))
         ang_vel = self.map_speed(self.normalize(self.turn_speed_in))
 
-        self.get_logger().info(f"lin_vel, ang_vel: ({lin_vel},{ang_vel})")
+        self.get_logger().info(f"hello: lin_vel, ang_vel: ({lin_vel},{ang_vel})")
 
         self.move_right_wheel(lin_vel + ang_vel)
         self.move_left_wheel(lin_vel - ang_vel)
