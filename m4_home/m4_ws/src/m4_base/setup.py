@@ -24,7 +24,8 @@ setup(
         'console_scripts': [
             'offboard_control = m4_base.offboard_control:main',
             'tilt_controller = m4_base.tilt_controller:main',
-            'drive_controller = m4_base.drive_controller:main'
+            'drive_controller = m4_base.drive_controller:main',
+            'angle_broadcaster = m4_base.angle_broadcaster:main',
         ],
     },
 )
