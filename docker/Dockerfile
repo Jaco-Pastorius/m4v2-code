@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 RUN apt-get install --no-install-recommends -y \
     python3-pip
 
+RUN apt-get install --no-install-recommends -y \
+    ros-foxy-vrpn-mocap
+
 # install pyserial 
 RUN python3 -m pip install pyserial 
 

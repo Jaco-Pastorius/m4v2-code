@@ -16,7 +16,7 @@ if [ $(docker ps -q -f name=${CONTAINER_NAME}) ]; then
 else
   # Run the container
   docker run -it --rm --privileged --name ${CONTAINER_NAME} \
-             --network="host" \
+	     --network host\
              -v ${HOST_DIRECTORY_PATH}:${CONTAINER_DIRECTORY_PATH} \
              -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro \
 	     -v /dev:/dev \
