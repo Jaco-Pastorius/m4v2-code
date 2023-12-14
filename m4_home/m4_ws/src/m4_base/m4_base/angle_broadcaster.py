@@ -71,8 +71,14 @@ class TiltAngleCalculator(Node):
         self.subscription_arm = self.create_subscription(PoseStamped, '/vrpn_mocap/m4_arm/pose', self.arm_callback, 10)
         self.subscription_base = self.create_subscription(PoseStamped, '/vrpn_mocap/m4_base/pose', self.base_callback, 10)
         self.publisher = self.create_publisher(Float32, 'tilt_angle', 10)
+        self.publisher_vel = self.create_publisher(Float32, 'tilt_angle_vel', 10)
+        self.publisher_filtered = self.create_publisher(Float32, 'tilt_angle_filtered', 10)
         self.arm_pose = None
         self.base_pose = None
+
+        self.prev_angle = 0.0
+        self.prev_angle_time = None
+
 
     def arm_callback(self, msg):
         self.arm_pose = msg
@@ -100,10 +106,38 @@ class TiltAngleCalculator(Node):
             roll, pitch, yaw = euler_from_quaternion(qr)
             relative_angle = np.rad2deg(roll)
 
+            # Get time
+            current_time = self.get_clock().now()
+
+            dt = 0.1
+            if self.prev_angle_time is not None:
+                dt = current_time - self.prev_angle_time
+                self.get_logger().info(f'Time elapsed since last tilt_angle message: {dt}')
+
+            self.prev_angle_time = current_time
+
+            # get current angle speed
+            relative_angle_vel = (relative_angle - self.prev_angle)/dt
+
+            self.prev_angle = deepcopy(relative_angle)
+
             # Publish the relative angle to the 'tilt_angle' topic
             msg = Float32()
             msg.data = relative_angle
             self.publisher.publish(msg)
+
+            # Publish the angle velocity to tilt_angle_vel topic
+            msg = Float32()
+            msg.data = relative_angle_vel
+            self.publisher_vel.publish(msg)
+            
+            # Run kalman filter
+
+
+            # msg = Float32()
+            # msg.data = relative_angle_filtered
+            # self.publisher_filtered.publish(msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
