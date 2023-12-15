@@ -108,7 +108,6 @@ class TiltAngleCalculator(Node):
             msg.data = relative_angle
             self.publisher.publish(msg)
 
-
 def main(args=None):
     rclpy.init(args=args)
     tilt_angle_calculator = TiltAngleCalculator()

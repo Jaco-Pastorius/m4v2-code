@@ -64,7 +64,6 @@ class TiltController(Node):
         self.tilt_angle_vel = 0.0
         self.prev_estimate = 0.0
 
-
         # Manual vs automatic control
         self.manual = True
 

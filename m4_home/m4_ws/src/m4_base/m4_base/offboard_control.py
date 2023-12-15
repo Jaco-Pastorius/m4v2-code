@@ -16,16 +16,12 @@ from px4_msgs.msg import ActuatorServos
 from px4_msgs.msg import VehicleAttitudeSetpoint
 from px4_msgs.msg import InputRc
 
-from std_msgs.msg import Int32
+from std_msgs.msg import Int32, Float32
 
 
 class OffboardControl(Node):
     def __init__(self):
         super().__init__('OffboardControl')
-        self.drive_speed_publisher_ = self.create_publisher(
-                                                Int32, 
-                                                "drive_speed", 
-                                                10)
         self.offboard_control_mode_publisher_ = self.create_publisher(
                                                         OffboardControlMode, 
                                                         "/fmu/in/offboard_control_mode", 
@@ -42,7 +38,6 @@ class OffboardControl(Node):
                                                         VehicleAttitudeSetpoint, 
                                                         "/fmu/in/vehicle_attitude_setpoint", 
                                                         10)
-
         self.rc_input_subscriber_ = self.create_subscription(
                                             InputRc,
                                             '/fmu/out/input_rc',
@@ -52,10 +47,6 @@ class OffboardControl(Node):
         self.offboard_setpoint_counter_ = 0
         self.timer_period = 0.1  # 100 milliseconds
         self.timer_ = self.create_timer(self.timer_period, self.timer_callback)
-        self.tilt_angle = 0.0 # fly configuration
-        self.tilt_angle_min = 1094 # corresponds to zero degrees i.e. fly configuration
-        self.tilt_angle_max = 1934 # corresponds to 90 degrees i.e. drive configuration
-        self.tilt_angle_dead = 1514 # corresponds to midway through i.e. 45 degrees
     
     def timer_callback(self):
         if (self.offboard_setpoint_counter_ == 10):
@@ -67,10 +58,8 @@ class OffboardControl(Node):
 
         # Offboard_control_mode needs to be paired with trajectory_setpoint
         self.publish_offboard_control_mode()
-        # self.publish_trajectory_setpoint()
-        self.publish_vehicle_attitude_setpoint()
-
-        # self.publish_actuator_servos()
+        self.publish_tilt_angle_ref()
+        # self.publish_vehicle_attitude_setpoint()
 
         # stop the counter after reaching 11
         if (self.offboard_setpoint_counter_ < 11):
@@ -102,28 +91,6 @@ class OffboardControl(Node):
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         self.offboard_control_mode_publisher_.publish(msg)
 
-
-    '''
-	Publish the offboard control mode.
-	For this example, only position and altitude controls are active.
-    '''
-
-    def publish_offboard_control_mode(self):
-        msg = OffboardControlMode()
-        msg.position = False  # True for position control
-        msg.velocity = False
-        msg.acceleration = False
-        msg.attitude = True
-        msg.body_rate = False
-        msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
-        self.offboard_control_mode_publisher_.publish(msg)
-
-    '''
-	Publish a trajectory setpoint
-	For this example, it sends a trajectory setpoint to make the
-	vehicle hover at 5 meters with a yaw angle of 180 degrees.
-    '''
-
     def publish_trajectory_setpoint(self):
         msg = TrajectorySetpoint()
         msg.position = [0.0, 0.0, -1.0] 
@@ -131,12 +98,18 @@ class OffboardControl(Node):
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         self.trajectory_setpoint_publisher_.publish(msg)
 
-    def publish_vehicle_attitude_setpoint(self):
-        msg = VehicleAttitudeSetpoint()
-        msg.q_d = [1.0,0.0,0.0,0.0] 
-        msg.thrust_body = [0.0, 0.0, -0.3] 
+    def publish_tilt_angle_ref(self):
+        # get current time in seconds
+        t = int(Clock().now().nanoseconds / 1e9) 
+
+        msg = Float32()
+        msg.data = phi(t)
+        msg.yaw = 1.57 # [-PI:PI]
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
-        self.vehicle_attitude_setpoint_publisher_.publish(msg)       
+        self.trajectory_setpoint_publisher_.publish(msg)
+
+    def phi(t):
+        return t
 
     '''
     Publish vehicle commands
