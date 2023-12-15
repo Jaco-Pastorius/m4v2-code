@@ -18,6 +18,8 @@ from px4_msgs.msg import InputRc
 
 from std_msgs.msg import Int32, Float32
 
+from copy import deepcopy
+
 
 class OffboardControl(Node):
     def __init__(self):
@@ -38,6 +40,10 @@ class OffboardControl(Node):
                                                         VehicleAttitudeSetpoint, 
                                                         "/fmu/in/vehicle_attitude_setpoint", 
                                                         10)
+        self.tilt_angle_ref_publisher   = self.create_publisher(
+                                                        Float32, 
+                                                        "/tilt_angle_ref_external", 
+                                                        10)
         self.rc_input_subscriber_ = self.create_subscription(
                                             InputRc,
                                             '/fmu/out/input_rc',
@@ -45,8 +51,16 @@ class OffboardControl(Node):
                                             qos_profile_sensor_data)
 
         self.offboard_setpoint_counter_ = 0
-        self.timer_period = 0.1  # 100 milliseconds
+        self.timer_period = 0.01  # 100 milliseconds
         self.timer_ = self.create_timer(self.timer_period, self.timer_callback)
+
+        self.min  = 1094
+        self.dead = 1514
+        self.max  = 1934
+
+        self.land_begin = False
+        self.t0_set = False
+        self.land_interrupted = False
     
     def timer_callback(self):
         if (self.offboard_setpoint_counter_ == 10):
@@ -54,7 +68,7 @@ class OffboardControl(Node):
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1., 6.)
 
             # Arm the vehicle
-            self.arm()
+            # self.arm()
 
         # Offboard_control_mode needs to be paired with trajectory_setpoint
         self.publish_offboard_control_mode()
@@ -66,10 +80,17 @@ class OffboardControl(Node):
             self.offboard_setpoint_counter_ += 1
 
     def listener_callback(self, msg):
-        self.get_logger().info("I heard: {}".format(msg.values[0]))
-        
-        # https://futabausa.com/wp-content/uploads/2018/09/18SZ.pdf
-        self.tilt_angle = msg.values[9] # corresponds to LS trim selector on futaba T18SZ that i configured in the function menu
+        if (msg.values[8] == self.max):
+            if not self.land_interrupted:
+                self.land_begin = True
+                if not self.t0_set:
+                    self.t0 = float(Clock().now().nanoseconds / 1e9)
+                    self.t0_set = True
+            else:
+                pass
+        else:
+            if self.land_begin:
+                self.land_interrupted = True
 
     # Arm the vehicle
     def arm(self):
@@ -99,17 +120,27 @@ class OffboardControl(Node):
         self.trajectory_setpoint_publisher_.publish(msg)
 
     def publish_tilt_angle_ref(self):
-        # get current time in seconds
-        t = int(Clock().now().nanoseconds / 1e9) 
+        if not self.land_interrupted:
+            msg = Float32()
+            msg.data = 0.0
 
-        msg = Float32()
-        msg.data = phi(t)
-        msg.yaw = 1.57 # [-PI:PI]
-        msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
-        self.trajectory_setpoint_publisher_.publish(msg)
+            if self.land_begin:
+                # get current time in seconds
+                t = Clock().now().nanoseconds / 1e9
+                msg.data = self.phi(t-self.t0)
 
-    def phi(t):
-        return t
+            self.tilt_angle_ref_publisher.publish(msg)
+        else:
+            pass
+
+
+    def phi(self,t):
+        out = 30.0*t
+        if out >= 85.0:
+            out = 85.0
+        elif out <=5.0:
+            out = 5.0     
+        return out
 
     '''
     Publish vehicle commands
