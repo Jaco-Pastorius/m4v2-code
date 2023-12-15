@@ -18,8 +18,9 @@ from px4_msgs.msg import InputRc
 
 from std_msgs.msg import Int32, Float32
 
+import numpy as np
+from scipy.interpolate import interp1d
 from copy import deepcopy
-
 
 class OffboardControl(Node):
     def __init__(self):
@@ -40,7 +41,7 @@ class OffboardControl(Node):
                                                         VehicleAttitudeSetpoint, 
                                                         "/fmu/in/vehicle_attitude_setpoint", 
                                                         10)
-        self.tilt_angle_ref_publisher   = self.create_publisher(
+        self.tilt_angle_ref_external_publisher   = self.create_publisher(
                                                         Float32, 
                                                         "/tilt_angle_ref_external", 
                                                         10)
@@ -61,7 +62,11 @@ class OffboardControl(Node):
         self.land_begin = False
         self.t0_set = False
         self.land_interrupted = False
-    
+
+        # load the desired angle trajectory
+        t_,phi_ = np.load('/home/m4pc/m4v2-code/m4_home/m4_ws/src/m4_base/m4_base/phi_t.npy')
+        self.phi = interp1d(t_, np.rad2deg(phi_), kind='linear', fill_value=(phi_[0],phi_[-1]))
+            
     def timer_callback(self):
         if (self.offboard_setpoint_counter_ == 10):
             # Change to Offboard mode after 10 setpoints
@@ -127,20 +132,20 @@ class OffboardControl(Node):
             if self.land_begin:
                 # get current time in seconds
                 t = Clock().now().nanoseconds / 1e9
-                msg.data = self.phi(t-self.t0)
+                msg.data = float(self.phi(t-self.t0))
 
-            self.tilt_angle_ref_publisher.publish(msg)
+            self.tilt_angle_ref_external_publisher.publish(msg)
         else:
             pass
 
 
-    def phi(self,t):
-        out = 30.0*t
-        if out >= 85.0:
-            out = 85.0
-        elif out <=5.0:
-            out = 5.0     
-        return out
+    # def phi(self,t):
+    #     out = 30.0*t
+    #     if out >= 85.0:
+    #         out = 85.0
+    #     elif out <=5.0:
+    #         out = 5.0     
+    #     return out
 
     '''
     Publish vehicle commands
