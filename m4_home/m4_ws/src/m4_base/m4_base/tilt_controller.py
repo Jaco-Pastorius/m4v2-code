@@ -6,6 +6,8 @@ from px4_msgs.msg import InputRc
 from std_msgs.msg import Int32, Float32
 from copy import deepcopy
 
+import numpy as np
+
 # roboclaw and jetson
 from m4_base.roboclaw_3 import Roboclaw
 
@@ -30,7 +32,9 @@ class TiltController(Node):
         self.angle_subscription  # prevent unused variable warning
 
         # Publisher filtered
+        self.publisher_ref = self.create_publisher(Float32, 'tilt_angle_ref', 10)
         self.publisher_filtered = self.create_publisher(Float32, 'tilt_angle_filtered', 10)
+        self.publisher_vel = self.create_publisher(Float32, 'tilt_angle_vel', 10)
 
         # Timer
         self.Ts = 0.1  # 100 milliseconds
@@ -57,7 +61,8 @@ class TiltController(Node):
         self.tilt_angle_in = 0.0
         self.prev_tilt_angle_in = 0.0
 
-        self.tilt_angle_in_estimate = 0.0
+        self.tilt_angle_vel = 0.0
+        self.prev_estimate = 0.0
 
 
         # Manual vs automatic control
@@ -89,6 +94,10 @@ class TiltController(Node):
         else:
             self.manual = True
 
+        msg = Float32()
+        msg.data = self.tilt_angle_ref
+        self.publisher_ref.publish(msg)
+
         # self.get_logger().info("LS_in: {}".format(self.LS_in))
         # self.get_logger().info("manual: {}".format(self.manual))
 
@@ -98,6 +107,15 @@ class TiltController(Node):
         # self.get_logger().info("tilt_angle_in: {}".format(self.tilt_angle_in))
 
     def timer_callback(self):
+
+        # compute tilt_angle velocity
+        if ((self.xkkm is not None) and (self.prev_estimate is not None)):
+            self.tilt_angle_vel = (self.xkkm - self.prev_estimate)/self.Ts
+
+        msg = Float32()
+        msg.data = self.tilt_angle_vel
+        self.publisher_vel.publish(msg)
+
         if (self.manual):
             # manual control of tilt angle
             u = self.normalize(self.LS_in)
@@ -131,6 +149,9 @@ class TiltController(Node):
             self.rc.BackwardM2(self.address, motor_speed)
 
     def estimate(self,uk,yk):
+
+        self.prev_estimate = deepcopy(self.xkkm)
+
         # Run kalman filter
         self.predict(uk)
         self.correct(yk)
@@ -150,10 +171,14 @@ class TiltController(Node):
 
     def control(self):
         kp, kd = 0.05, 0.01
-        e = self.tilt_angle_in_estimate - self.tilt_angle_ref
-        u = -kp*e
+        e = self.xkkm - self.tilt_angle_ref
+        ed = self.tilt_angle_vel
+        u = -kp*e - kd*ed
         print(f"u:{u}")
-        self.spin_motor(u)
+        if np.isfinite(u):
+            self.spin_motor(u)
+        else:
+            u = 0.0
         return u
 
     def on_shutdown(self):
