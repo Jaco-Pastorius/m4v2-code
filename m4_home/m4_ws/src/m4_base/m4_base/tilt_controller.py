@@ -98,15 +98,15 @@ class TiltController(Node):
         # self.get_logger().info("tilt_angle_in: {}".format(self.tilt_angle_in))
 
     def timer_callback(self):
-        # First estimate the angle
-        self.estimate()
         if (self.manual):
             # manual control of tilt angle
-            tilt_speed = self.normalize(self.LS_in)
-            self.spin_motor(tilt_speed)
+            u = self.normalize(self.LS_in)
+            self.spin_motor(u)
+            self.estimate(u,self.tilt_angle_in)
         else:
             # automatic control of tilt angle
-            self.control()
+            u = self.control()
+            self.estimate(u,self.tilt_angle_in)
   
     def normalize(self,LS_in):
         return (LS_in-self.LS_dead)/(self.LS_max-self.LS_dead)
@@ -151,9 +151,10 @@ class TiltController(Node):
     def control(self):
         kp, kd = 0.05, 0.01
         e = self.tilt_angle_in_estimate - self.tilt_angle_ref
-        tilt_speed = -kp*e
-        print(f"tilt_speed:{tilt_speed}")
-        self.spin_motor(tilt_speed)
+        u = -kp*e
+        print(f"u:{u}")
+        self.spin_motor(u)
+        return u
 
     def on_shutdown(self):
         self.stop()
