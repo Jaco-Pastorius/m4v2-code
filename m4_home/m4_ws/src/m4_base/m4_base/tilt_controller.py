@@ -4,6 +4,7 @@ from rclpy.qos import qos_profile_sensor_data
 
 from px4_msgs.msg import InputRc
 from std_msgs.msg import Int32, Float32
+from copy import deepcopy
 
 # roboclaw and jetson
 from m4_base.roboclaw_3 import Roboclaw
@@ -51,6 +52,7 @@ class TiltController(Node):
 
         # Initialize tilt_angle_in
         self.tilt_angle_in = 0.0
+        self.prev_tilt_angle_in = 0.0
 
         # Manual vs automatic control
         self.manual = True
@@ -71,15 +73,17 @@ class TiltController(Node):
         # set manual or automatic control of tilt angle
         if msg.values[7] == 1934:
             self.manual = False
+            print("automatic tracking ! ")
         else:
             self.manual = True
 
-        self.get_logger().info("LS_in: {}".format(self.LS_in))
-        self.get_logger().info("manual: {}".format(self.manual))
+        # self.get_logger().info("LS_in: {}".format(self.LS_in))
+        # self.get_logger().info("manual: {}".format(self.manual))
 
     def angle_listener_callback(self, msg):
+        self.prev_tilt_angle_in = np.copy(self.tilt_angle_in)
         self.tilt_angle_in = msg.data # in degrees
-        self.get_logger().info("tilt_angle_in: {}".format(self.self.tilt_angle_in))
+        # self.get_logger().info("tilt_angle_in: {}".format(self.tilt_angle_in))
 
     def timer_callback(self):
         if (self.manual):
@@ -88,9 +92,11 @@ class TiltController(Node):
             self.spin_motor(tilt_speed)
         else:
             # automatic control of tilt angle
-            kp = 0.01
+            kp, kd = 0.05, 0.01
             e = self.tilt_angle_in - self.tilt_angle_ref
-            tilt_speed = kp*e
+            tilt_speed = -kp*e
+            print(f"tilt_speed:{tilt_speed}")
+            self.spin_motor(tilt_speed)
             pass
 
     def normalize(self,LS_in):
