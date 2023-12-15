@@ -7,7 +7,7 @@ tmux new-session -d -s angle_broadcaster
 echo "Starting vrpn_client"
 
 tmux send-keys -t vrpn_mocap 'source /opt/ros/foxy/setup.bash' Enter
-tmux send-keys -t vrpn_mocap 'ros2 launch vrpn_mocap client.launch.yaml server:=192.168.0.108' Enter
+tmux send-keys -t vrpn_mocap 'ros2 launch vrpn_mocap client.launch.yaml server:=192.168.0.33' Enter
 
 echo "Starting angle_broadcaster"
 

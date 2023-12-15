@@ -29,9 +29,12 @@ class TiltController(Node):
             qos_profile_sensor_data)
         self.angle_subscription  # prevent unused variable warning
 
+        # Publisher filtered
+        self.publisher_filtered = self.create_publisher(Float32, 'tilt_angle_filtered', 10)
+
         # Timer
-        self.timer_period = 0.1  # 100 milliseconds
-        self.timer_ = self.create_timer(self.timer_period, self.timer_callback)
+        self.Ts = 0.1  # 100 milliseconds
+        self.timer_ = self.create_timer(self.Ts, self.timer_callback)
 
         # Set min, max, and dead values for LS_in (the control for the tilt angle coming from rc input)
         self.LS_min = 1094 # corresponds to zero degrees i.e. fly configuration
@@ -54,6 +57,9 @@ class TiltController(Node):
         self.tilt_angle_in = 0.0
         self.prev_tilt_angle_in = 0.0
 
+        self.tilt_angle_in_estimate = 0.0
+
+
         # Manual vs automatic control
         self.manual = True
 
@@ -64,6 +70,12 @@ class TiltController(Node):
         self.address = 0x80
         self.rc = Roboclaw("/dev/ttyACM1",115200)
         self.rc.Open()
+
+        # Initialize kalman filter
+        self.xkk = 0.0
+        self.pkk = 1.0
+        self.Rv,self.Rw = 1.0,5.0
+        self.xkkm,self.pkkm = None, None
 
     def rc_listener_callback(self, msg):
         # https://futabausa.com/wp-content/uploads/2018/09/18SZ.pdf
@@ -81,24 +93,21 @@ class TiltController(Node):
         # self.get_logger().info("manual: {}".format(self.manual))
 
     def angle_listener_callback(self, msg):
-        self.prev_tilt_angle_in = np.copy(self.tilt_angle_in)
+        self.prev_tilt_angle_in = deepcopy(self.tilt_angle_in)
         self.tilt_angle_in = msg.data # in degrees
         # self.get_logger().info("tilt_angle_in: {}".format(self.tilt_angle_in))
 
     def timer_callback(self):
+        # First estimate the angle
+        self.estimate()
         if (self.manual):
             # manual control of tilt angle
             tilt_speed = self.normalize(self.LS_in)
             self.spin_motor(tilt_speed)
         else:
             # automatic control of tilt angle
-            kp, kd = 0.05, 0.01
-            e = self.tilt_angle_in - self.tilt_angle_ref
-            tilt_speed = -kp*e
-            print(f"tilt_speed:{tilt_speed}")
-            self.spin_motor(tilt_speed)
-            pass
-
+            self.control()
+  
     def normalize(self,LS_in):
         return (LS_in-self.LS_dead)/(self.LS_max-self.LS_dead)
 
@@ -120,6 +129,31 @@ class TiltController(Node):
             self.rc.ForwardM2(self.address, motor_speed)
         else:
             self.rc.BackwardM2(self.address, motor_speed)
+
+    def estimate(self,uk,yk):
+        # Run kalman filter
+        self.predict(uk)
+        self.correct(yk)
+
+        msg = Float32()
+        msg.data = self.xkkm
+        self.publisher_filtered.publish(msg)
+
+    def predict(self,uk):
+        self.xkkm = self.xkk + self.Ts * uk
+        self.pkkm = self.pkk + self.Rv
+
+    def correct(self,y):
+        l = self.pkkm * 1/(self.Rw + self.pkkm)
+        self.xkk = self.xkkm - l*(self.xkkm - y)
+        self.pkk = self.pkkm - l*self.pkkm
+
+    def control(self):
+        kp, kd = 0.05, 0.01
+        e = self.tilt_angle_in_estimate - self.tilt_angle_ref
+        tilt_speed = -kp*e
+        print(f"tilt_speed:{tilt_speed}")
+        self.spin_motor(tilt_speed)
 
     def on_shutdown(self):
         self.stop()
