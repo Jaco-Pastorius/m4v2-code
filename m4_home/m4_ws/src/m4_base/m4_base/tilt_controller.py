@@ -82,6 +82,24 @@ class TiltController(Node):
         self.Rv,self.Rw = 1.0,5.0
         self.xkkm,self.pkkm = None, None
 
+        # Declare parameters
+        self.declare_parameters(
+            namespace='',
+            parameters=[
+                ('kp', 0.035),
+                ('kd', 0.0),
+                ('ki', 0.0)
+            ]
+        )
+
+        # Retrieve parameter values
+        self.kp = self.get_parameter('kp').value
+        self.kd = self.get_parameter('kd').value
+        self.ki = self.get_parameter('ki').value
+
+        # initialize integral error
+        self.ei = 0.0
+
     def rc_listener_callback(self, msg):
         # https://futabausa.com/wp-content/uploads/2018/09/18SZ.pdf
         self.LS_in = msg.values[9] # corresponds to LS trim selector on futaba T18SZ that I configured in the function menu
@@ -89,14 +107,12 @@ class TiltController(Node):
         # set manual or automatic control of tilt angle
         if msg.values[7] == self.max:
             self.manual = False
-            print("automatic tracking ! ")
         else:
             self.manual = True
 
         # set external reference tracking 
         if msg.values[8] == self.max:
             self.external_ref = True
-            print("external reference tracking ! ")
         else:
             self.external_ref = False
 
@@ -156,10 +172,12 @@ class TiltController(Node):
         # takes in a tilt_speed between -1 and 1 writes the pwm signal to the roboclaw 
         motor_speed = self.map_speed(abs(tilt_speed))
         if (tilt_speed < 0): # go up
-            if motor_speed == 127: 
+            if motor_speed >= 127: 
                 motor_speed = 126 # weird bug not sure why this is needed
             self.rc.ForwardM2(self.address, motor_speed)
         else:
+            if motor_speed >= 127:
+                motor_speed = 126
             self.rc.BackwardM2(self.address, motor_speed)
 
     def estimate(self,uk,yk):
@@ -184,12 +202,19 @@ class TiltController(Node):
         self.pkk = self.pkkm - l*self.pkkm
 
     def control(self,ref):
-        kp, kd = 0.05, 0.01
+
+        self.kp = self.get_parameter('kp').value
+        self.kd = self.get_parameter('kd').value
+        self.ki = self.get_parameter('ki').value
+
         e = self.xkkm - ref
         ed = self.tilt_angle_vel
-        u = -kp*e - kd*ed
+        self.ei += self.Ts*e
+
+        u = -self.kp*e - self.kd*ed - self.ki*self.ei
         print(f"u:{u}")
         if np.isfinite(u):
+            print(f"u:{u}")
             self.spin_motor(u)
         else:
             u = 0.0
