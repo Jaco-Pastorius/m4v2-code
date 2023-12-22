@@ -64,7 +64,7 @@ class OffboardControl(Node):
         self.land_interrupted = False
 
         # load the desired angle trajectory
-        t_,phi_ = np.load('/home/m4pc/m4v2-code/m4_home/m4_ws/src/m4_base/m4_base/phi_t.npy')
+        t_,phi_ = np.load('/home/m4version2/m4v2-code/m4_home/m4_ws/src/m4_base/m4_base/phi_t.npy')
         self.phi = interp1d(t_, np.rad2deg(phi_), kind='linear', fill_value=(phi_[0],phi_[-1]))
             
     def timer_callback(self):
