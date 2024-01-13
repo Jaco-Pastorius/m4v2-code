@@ -8,6 +8,8 @@ from copy import deepcopy
 
 import numpy as np
 
+from scipy.interpolate import interp1d
+
 # roboclaw and jetson
 from m4_base.roboclaw_3 import Roboclaw
 
@@ -76,6 +78,36 @@ class TiltController(Node):
         self.rc = Roboclaw("/dev/ttyACM1",115200)
         self.rc.Open()
 
+        # set encoder count to zero (always start robot in drive configuration)
+        self.rc.SetEncM2(self.address,0)
+        self.reset_encoder = 0
+
+        # set pin functions for motor 2 (M2) to go to zero when it reaches home
+        self.rc.SetPinFunctions(self.address,0x00,0x62,0x62)
+
+        # tabulate encoder vs angle
+        self.encoder_data = np.array([0,2518,4902,6813,8429,9396,
+                                      10477,11156,13324,14293,
+                                      15396,16820,17563,19043,
+                                      16677,14629,12845,11206,8887,
+                                      6007,3631,1424,2680,4408,
+                                      5960,6976,8223,9351,
+                                      10567,11136,12376,13456,14391,
+                                      16464,17294,17662,19046,
+                                      17648,16080,13721,12225,10929,9137,
+                                      7513,6009,4345,2929,1489])
+        
+        self.angle_data = 90 - np.array([88,85,78.4,70.7,62.7,57.3,51.2,47.1,33.8,27.9,21.3,12.7,8.3,0.5,
+                                    13.4,25.8,36.6,46.7,60.2,74.2,82.4,86.7,84.6,80.1,
+                                    74.4,70.0,63.7,57.6,50.6,47.1,39.7,32.8,27.2,14.6,9.8,7.6,0.6,7.5,16.8,
+                                    31.2,40.4,48.3,58.6,67.3,74.1,80.3,84.1,86.7])
+        
+        idx_sort = np.argsort(self.angle_data)
+        self.angle_data = self.angle_data[idx_sort]
+        self.encoder_data = self.encoder_data[idx_sort]
+        
+        self.n_phi = lambda phi : np.interp(phi,self.angle_data,self.encoder_data)
+
         # Initialize kalman filter
         self.xkk = 0.0
         self.pkk = 1.0
@@ -87,7 +119,7 @@ class TiltController(Node):
             namespace='',
             parameters=[
                 ('kp', 0.035),
-                ('kd', 0.0),
+                ('kd', 0.0), 
                 ('ki', 0.0)
             ]
         )
@@ -103,6 +135,9 @@ class TiltController(Node):
     def rc_listener_callback(self, msg):
         # https://futabausa.com/wp-content/uploads/2018/09/18SZ.pdf
         self.LS_in = msg.values[9] # corresponds to LS trim selector on futaba T18SZ that I configured in the function menu
+
+        # reset encoder 
+        self.reset_encoder = msg.values[12]
 
         # set manual or automatic control of tilt angle
         if msg.values[7] == self.max:
@@ -133,6 +168,10 @@ class TiltController(Node):
         self.tilt_angle_ref_external = msg.data # in degrees
 
     def timer_callback(self):
+
+        if (self.reset_encoder == self.max):
+            self.rc.SetEncM2(self.address,0)
+
         # compute tilt_angle velocity
         if ((self.xkkm is not None) and (self.prev_estimate is not None)):
             self.tilt_angle_vel = (self.xkkm - self.prev_estimate)/self.Ts
@@ -146,15 +185,26 @@ class TiltController(Node):
             u = self.normalize(self.LS_in)
             self.spin_motor(u)
             self.estimate(u,self.tilt_angle_in)
+
+            # print encoder count
+            enc_count = self.rc.ReadEncM2(self.address)
+            print(enc_count)
+
         else:
             # automatic control of tilt angle
-            if self.external_ref:
-                ref = self.tilt_angle_ref_external
-            else:
-                ref = self.tilt_angle_ref
 
-            u = self.control(ref)
-            self.estimate(u,self.tilt_angle_in)
+            ref_angle = -90 * (self.normalize(self.LS_in) - 1) / 2.0
+            print(ref_angle)
+            n_ref_angle =  np.interp(ref_angle,self.angle_data,self.encoder_data)
+            print(n_ref_angle)
+            self.position_control(n_ref_angle)
+
+            # if self.external_ref:
+            #     ref = self.tilt_angle_ref_external
+            # else:
+            #     ref = self.tilt_angle_ref
+            # u = self.control(ref)
+            # self.estimate(u,self.tilt_angle_in)
   
     def normalize(self,LS_in):
         return (LS_in-self.dead)/(self.max-self.dead)
@@ -184,7 +234,7 @@ class TiltController(Node):
 
         self.prev_estimate = deepcopy(self.xkkm)
 
-        # Run kalman filter
+        # Run kalman filterphi
         self.predict(uk)
         self.correct(yk)
 
@@ -219,6 +269,10 @@ class TiltController(Node):
         else:
             u = 0.0
         return u
+    
+    def position_control(self,ref):
+        # pass
+        self.rc.SpeedAccelDeccelPositionM2(self.address,32000,12000,32000,int(ref),0)
 
     def on_shutdown(self):
         self.stop()
