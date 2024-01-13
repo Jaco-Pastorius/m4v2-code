@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
-from std_msgs.msg import Float32
+from px4_msgs.msg import TiltAngle
 import numpy as np 
 from copy import deepcopy
 
@@ -70,7 +70,7 @@ class TiltAngleCalculator(Node):
         super().__init__('tilt_angle_calculator')
         self.subscription_arm = self.create_subscription(PoseStamped, '/vrpn_mocap/m4_arm/pose', self.arm_callback, 10)
         self.subscription_base = self.create_subscription(PoseStamped, '/vrpn_mocap/m4_base/pose', self.base_callback, 10)
-        self.publisher = self.create_publisher(Float32, 'tilt_angle', 10)
+        self.publisher = self.create_publisher(TiltAngle, '/fmu/in/tilt_angle', 10)
         self.arm_pose = None
         self.base_pose = None
 
@@ -104,8 +104,8 @@ class TiltAngleCalculator(Node):
             relative_angle = np.rad2deg(roll)
 
             # Publish the relative angle to the 'tilt_angle' topic
-            msg = Float32()
-            msg.data = relative_angle
+            msg = TiltAngle()
+            msg.value = relative_angle
             self.publisher.publish(msg)
 
 def main(args=None):
