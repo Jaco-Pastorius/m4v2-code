@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 
-from px4_msgs.msg import InputRc
+from px4_msgs.msg import InputRc, TiltAngle
 from std_msgs.msg import Int32, Float32
 from copy import deepcopy
 
@@ -40,6 +40,9 @@ class TiltController(Node):
             self.tilt_angle_ref_external_listener_callback,
             qos_profile_sensor_data)
         self.tilt_angle_ref_external_subscription  # prevent unused variable warning
+
+        # Publisher tilt angle
+        self.publisher_tilt = self.create_publisher(TiltAngle, '/fmu/in/tilt_angle', 10)
 
         # Publisher filtered
         self.publisher_ref = self.create_publisher(Float32, 'tilt_angle_ref', 10)
@@ -86,25 +89,31 @@ class TiltController(Node):
         self.rc.SetPinFunctions(self.address,0x00,0x62,0x62)
 
         # tabulate encoder vs angle
+        # self.encoder_data = np.array([0,2518,4902,6813,8429,9396,
+        #                               10477,11156,13324,14293,
+        #                               15396,16820,17563,19043,
+        #                               16677,14629,12845,11206,8887,
+        #                               6007,3631,1424,2680,4408,
+        #                               5960,6976,8223,9351,
+        #                               10567,11136,12376,13456,14391,
+        #                               16464,17294,17662,19046,
+        #                               17648,16080,13721,12225,10929,9137,
+        #                               7513,6009,4345,2929,1489])
+        
+        # self.angle_data = np.array([88,85,78.4,70.7,62.7,57.3,51.2,47.1,33.8,27.9,21.3,12.7,8.3,0.5,
+        #                             13.4,25.8,36.6,46.7,60.2,74.2,82.4,86.7,84.6,80.1,
+        #                             74.4,70.0,63.7,57.6,50.6,47.1,39.7,32.8,27.2,14.6,9.8,7.6,0.6,7.5,16.8,
+        #                             31.2,40.4,48.3,58.6,67.3,74.1,80.3,84.1,86.7])
+        
         self.encoder_data = np.array([0,2518,4902,6813,8429,9396,
                                       10477,11156,13324,14293,
-                                      15396,16820,17563,19043,
-                                      16677,14629,12845,11206,8887,
-                                      6007,3631,1424,2680,4408,
-                                      5960,6976,8223,9351,
-                                      10567,11136,12376,13456,14391,
-                                      16464,17294,17662,19046,
-                                      17648,16080,13721,12225,10929,9137,
-                                      7513,6009,4345,2929,1489])
+                                      15396,16820,17563,19043])
         
-        self.angle_data = 90 - np.array([88,85,78.4,70.7,62.7,57.3,51.2,47.1,33.8,27.9,21.3,12.7,8.3,0.5,
-                                    13.4,25.8,36.6,46.7,60.2,74.2,82.4,86.7,84.6,80.1,
-                                    74.4,70.0,63.7,57.6,50.6,47.1,39.7,32.8,27.2,14.6,9.8,7.6,0.6,7.5,16.8,
-                                    31.2,40.4,48.3,58.6,67.3,74.1,80.3,84.1,86.7])
-        
-        idx_sort = np.argsort(self.angle_data)
-        self.angle_data = self.angle_data[idx_sort]
-        self.encoder_data = self.encoder_data[idx_sort]
+        self.angle_data = np.array([88,85,78.4,70.7,62.7,57.3,51.2,47.1,33.8,27.9,21.3,12.7,8.3,0.5])
+
+        # idx_sort = np.argsort(self.encoder_data)
+        # self.encoder_data = self.encoder_data[idx_sort]
+        # self.angle_data = self.angle_data[idx_sort]
         
         self.n_phi = lambda phi : np.interp(phi,self.angle_data,self.encoder_data)
 
@@ -180,15 +189,25 @@ class TiltController(Node):
         msg.data = self.tilt_angle_vel
         self.publisher_vel.publish(msg)
 
+
+        # print encoder count
+        enc_count = self.rc.ReadEncM2(self.address)
+
+        tilt_angle =  float(np.interp(enc_count[1],self.encoder_data,self.angle_data))
+        print(enc_count)
+        print(f"enc_count[1] is: {enc_count[1]}")
+        print(f"tilt angle is: {tilt_angle}")
+
+        # publish tilt angle
+        msg = TiltAngle()
+        msg.value = tilt_angle
+        self.publisher_tilt.publish(msg)
+
         if (self.manual):
             # manual control of tilt angle
             u = self.normalize(self.LS_in)
             self.spin_motor(u)
             self.estimate(u,self.tilt_angle_in)
-
-            # print encoder count
-            enc_count = self.rc.ReadEncM2(self.address)
-            print(enc_count)
 
         else:
             # automatic control of tilt angle
