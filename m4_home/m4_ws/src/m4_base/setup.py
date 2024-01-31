@@ -26,6 +26,7 @@ setup(
             'tilt_controller = m4_base.tilt_controller:main',
             'drive_controller = m4_base.drive_controller:main',
             'angle_broadcaster = m4_base.angle_broadcaster:main',
+            'relay_mocap = m4_base.relay_mocap:main',
         ],
     },
 )
