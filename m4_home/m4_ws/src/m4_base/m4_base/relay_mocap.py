@@ -23,19 +23,27 @@ class MocapToVisualOdometry(Node):
         vehicle_odom_msg = VehicleOdometry()
 
         # Set the timestamp
-        vehicle_odom_msg.timestamp = msg.header.stamp.to_msg().sec * 1e6 + msg.header.stamp.to_msg().nanosec / 1e3
+        # vehicle_odom_msg.timestamp = int((msg.header.stamp.sec * 1e6) + (msg.header.stamp.nanosec / 1e3))
+        vehicle_odom_msg.timestamp = 0
+        vehicle_odom_msg.timestamp_sample = 0
 
         # Set the pose_frame (assuming NED for simplicity)
-        # vehicle_odom_msg.pose_frame = VehicleOdometry.POSE_FRAME_NED
+        vehicle_odom_msg.pose_frame = 2
 
         # Set position
-        vehicle_odom_msg.position = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z]
+        vehicle_odom_msg.position = [msg.pose.position.x, msg.pose.position.z, -msg.pose.position.y]
 
         # Set orientation (using quaternion)
-        vehicle_odom_msg.q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
+        vehicle_odom_msg.q = [msg.pose.orientation.w, msg.pose.orientation.x, msg.pose.orientation.z, -msg.pose.orientation.y]
 
         # Set velocity_frame (assuming NED for simplicity)
-        # vehicle_odom_msg.velocity_frame = VehicleOdometry.VELOCITY_FRAME_NED
+        vehicle_odom_msg.velocity_frame = 2
+        vehicle_odom_msg.velocity = [0.0, 0.0, 0.0] # in m/s
+        vehicle_odom_msg.angular_velocity = [0.0, 0.0, 0.0] # in body-fixed frame (rad/s)
+        vehicle_odom_msg.position_variance = [0.0, 0.0, 0.0]
+        vehicle_odom_msg.orientation_variance = [0.0, 0.0, 0.0]
+        vehicle_odom_msg.velocity_variance = [0.0, 0.0, 0.0]
+
 
         # Set velocity, angular_velocity, and other fields as needed
 
