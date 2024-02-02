@@ -11,7 +11,7 @@ from rclpy.qos import qos_profile_sensor_data
 from px4_msgs.msg import OffboardControlMode
 from px4_msgs.msg import VehicleCommand
 from px4_msgs.msg import TiltAngle
-from px4_msgs.msg import VehicleAttitudeSetpoint
+from px4_msgs.msg import ManualControlSetpoint
 from px4_msgs.msg import InputRc
 
 from geometry_msgs.msg import PoseStamped
@@ -47,9 +47,9 @@ class DescentController(Node):
                                                         VehicleCommand, 
                                                         "/fmu/in/vehicle_command", 
                                                         10)
-        self.vehicle_attitude_setpoint_publisher_   = self.create_publisher(
-                                                        VehicleAttitudeSetpoint, 
-                                                        "/fmu/in/vehicle_attitude_setpoint", 
+        self.manual_control_setpoint_publisher_   = self.create_publisher(
+                                                        ManualControlSetpoint, 
+                                                        "/fmu/in/manual_control_input", 
                                                         10)
         self.tilt_angle_ref_external_publisher   = self.create_publisher(
                                                         TiltAngle, 
@@ -58,7 +58,7 @@ class DescentController(Node):
         
         # Create timer
         self.offboard_setpoint_counter_ = 0
-        self.Ts = 0.01  # 100 Hz
+        self.Ts = 0.2  # 20 Hz
         self.timer_ = self.create_timer(self.Ts, self.timer_callback)
 
         # Set RC input limits
@@ -68,18 +68,23 @@ class DescentController(Node):
 
         # Desired thrust and tilt angle 
         self.throttle_desired       = 0.0
-        self.throttle_filtered      = 0.0
         self.tilt_angle_desired     = 0.0
+
+        # Filtered throttle, roll, pitch, and yaw
+        self.throttle_filtered      = 0.0
+        self.roll_filtered          = 0.0
+        self.pitch_filtered         = 0.0
+        self.yaw_filtered           = 0.0
 
         # previous desired throttle for low-pass filtering
         self.throttle_desired_prev  = 0.0
-        self.alpha = 0.5                      # low pass filter gain
+        self.alpha = 0.5                      # low pass filter smoothing factor (0.5 is moving average)
 
         # Current descent speed 
         self.zdot = 0.0
 
         # Descent logic
-        self.land_begin = False
+        self.filtering = False
         self.t0_set = False
         self.land_interrupted = False
 
@@ -95,21 +100,23 @@ class DescentController(Node):
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1., 6.)
 
             # Arm the vehicle (vehicle should already be armed here)
-            self.arm()  # DISABLE THIS WHEN DOING REAL TESTS: will already be in stabilize mode
+            self.arm()  
 
         # Give offboard control mode the necessary heartbeat
         self.publish_offboard_control_mode()
+        
+        self.write_control_inputs()
 
-        if self.land_begin:
+        if self.filtering:
 
-            # Compute desired tilt_angle 
-            self.compute_desired_tilt_angle()
+            # Update filter i.e. set filtered throttle and couple tilt angle to it
+            self.filter_control_inputs()
 
             # Publish the desired tilt angle 
             self.publish_tilt_angle_ref()
 
-            # Publish the desired throttle and roll, pitch, yaw (set these to zero)
-            self.publish_vehicle_attitude_setpoint()
+        # Publish the desired throttle and roll, pitch, yaw (set these to zero)
+        self.publish_manual_control_setpoint()
 
         # stop the counter after reaching 11
         if (self.offboard_setpoint_counter_ < 11):
@@ -117,21 +124,37 @@ class DescentController(Node):
 
     def rc_listener_callback(self, msg):
 
-        # get desired throttle and use a low pass filter to smooth out the inputs
+        # get desired throttle previous
         self.throttle_desired_prev = deepcopy(self.throttle_desired)
+
+        # get current desired throttle
         self.throttle_desired = self.normalize(msg.values[2])
-        self.throttle_desired = self.alpha * self.throttle_desired + (1.0-self.alpha) * self.throttle_desired_prev
+        
+        # get current desired roll, pitch, yaw
+        self.roll_desired     = self.normalize(msg.values[0])
+        self.pitch_desired    = self.normalize(msg.values[1])
+        self.yaw_desired      = self.normalize(msg.values[3])
 
         if (msg.values[8] == self.max):
-            self.land_begin = True
+            self.filtering = True
         else:
-            self.land_begin = False
+            self.filtering = False
+
+    def write_control_inputs(self):
+        # pass RC inputs straight through if there is no filtering (this should fly exactly like stabilize mode)
+        self.throttle_filtered = deepcopy(self.throttle_desired)
+        self.roll_filtered     = deepcopy(self.roll_desired)
+        self.pitch_filtered    = deepcopy(self.pitch_desired)
+        self.yaw_filtered      = deepcopy(self.yaw_desired)
 
     # Compute desired tilt angle
-    def compute_desired_tilt_angle(self):
+    def filter_control_inputs(self):
 
         # set current descent velocity
         zdotk = -self.Vsq # for test without optitrack (To Do: replace this with actual mocap values)
+
+        # first low pass filter the desired throttle
+        self.throttle_desired = self.alpha * self.throttle_desired + (1.0-self.alpha) * self.throttle_desired_prev
 
         # convert desired throttle to desired thrust 
         thrust_desired = self.throttle_to_thrust(self.throttle_desired)
@@ -140,15 +163,20 @@ class DescentController(Node):
         T_min = self.m*self.g - self.m*(zdotk+self.Vsq)/self.Ts
 
         # filter desired thrust and throttle
-        thrust_filtered = deepcopy(thrust_desired)
-        self.throttle_filtered = deepcopy(self.throttle_desired)
-
         if (thrust_desired < T_min) : 
             self.throttle_filtered = self.thrust_to_throttle(T_min)
             thrust_filtered = T_min
+        else:
+            self.throttle_filtered = deepcopy(self.throttle_desired)
+            thrust_filtered = deepcopy(thrust_desired)
 
         # compute the desired tilt angle 
         self.tilt_angle_desired = np.arccos((self.m*self.g-self.m*(zdotk + self.Vsq)/self.Ts)/thrust_filtered)
+
+        # finally set roll pitch yaw filtered to zero
+        self.roll_filtered  = 0.0
+        self.pitch_filtered = 0.0
+        self.yaw_filtered   = 0.0
 
     # Arm the vehicle
     def arm(self):
@@ -170,29 +198,20 @@ class DescentController(Node):
         msg.body_rate = False
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         self.offboard_control_mode_publisher_.publish(msg)
-
-    def publish_vehicle_attitude_setpoint(self):
-        msg = VehicleAttitudeSetpoint()
-        msg.roll_body = 0.0
-        msg.pitch_body = 0.0
-        msg.yaw_body = 0.0 
-        msg.thrust_body = [0.0, 0.0, -self.throttle_filtered]  # For clarification: For multicopters thrust_body[0] and thrust[1] are usually 0 and thrust[2] is the negative throttle demand.
+        
+    def publish_manual_control_setpoint(self):
+        msg = ManualControlSetpoint()
+        msg.roll = self.roll_filtered
+        msg.pitch = self.pitch_filtered
+        msg.yaw = self.yaw_filtered
+        msg.throttle =  self.throttle_filtered  
         msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
         self.vehicle_attitude_setpoint_publisher_.publish(msg)       
-        
+
     def publish_tilt_angle_ref(self):
-        if not self.land_interrupted:
-            msg = TiltAngle()
-            msg.value = 0.0
-
-            if self.land_begin:
-                # get current time in seconds
-                t = Clock().now().nanoseconds / 1e9
-                msg.value = float(self.tilt_angle_desired)
-
-            self.tilt_angle_ref_external_publisher.publish(msg)
-        else:
-            pass
+        msg = TiltAngle()
+        msg.value = self.tilt_angle_desired
+        self.tilt_angle_ref_external_publisher.publish(msg)
     
     '''
     Publish vehicle commands
@@ -214,13 +233,17 @@ class DescentController(Node):
         self.vehicle_command_publisher_.publish(msg)
 
     def normalize(self,rc_in):
-        return (rc_in-self.min)/(self.max-self.min)
+        # returns values between -1 and 1 
+        return (rc_in-self.dead)/(self.max-self.dead)
 
     def throttle_to_thrust(self,throttle):
+        throttle = (throttle + 1.0)/2.0   # convert to 0,1 range from -1,1 
         return self.thrust_to_weight_ratio * self.m * self.g * throttle
         
     def thrust_to_throttle(self,thrust):
-        return thrust / self.thrust_to_weight_ratio * self.m * self.g
+        throttle = thrust / self.thrust_to_weight_ratio * self.m * self.g  # this is throttle from 0 to 1 
+        throttle = throttle * 2.0 - 1.0                                    # convert back to -1,1 range 
+        return 
 
 
 def main(args=None):

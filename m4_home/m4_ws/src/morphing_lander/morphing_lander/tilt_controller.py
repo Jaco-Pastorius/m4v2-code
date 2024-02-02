@@ -39,7 +39,7 @@ class TiltController(Node):
         self.publisher_tilt = self.create_publisher(TiltAngle, '/fmu/in/tilt_angle', 10)
 
         # Timer
-        self.Ts = 0.1  # 10 Hz
+        self.Ts = 0.2  # 20 Hz
         self.timer_ = self.create_timer(self.Ts, self.timer_callback)
 
         # Set min, max, and dead values for LS_in (the control for the tilt angle coming from rc input)
