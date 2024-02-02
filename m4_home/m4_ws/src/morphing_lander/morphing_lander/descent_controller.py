@@ -218,7 +218,7 @@ class DescentController(Node):
         msg.yaw = self.yaw_filtered
         msg.throttle =  self.throttle_filtered  
         msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
-        self.vehicle_attitude_setpoint_publisher_.publish(msg)       
+        self.manual_control_setpoint_publisher_.publish(msg)       
 
     def publish_tilt_angle_ref(self):
         msg = TiltAngle()
