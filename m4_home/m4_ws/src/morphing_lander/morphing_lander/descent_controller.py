@@ -218,7 +218,7 @@ class DescentController(Node):
         msg.roll = self.roll_filtered
         msg.pitch = self.pitch_filtered
         msg.yaw = self.yaw_filtered
-        msg.throttle =  self.throttle_filtered 
+        msg.throttle =  0.0
         msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
         self.manual_control_setpoint_publisher_.publish(msg)       
 
