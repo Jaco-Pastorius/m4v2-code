@@ -218,9 +218,9 @@ class DescentController(Node):
         msg.roll = self.roll_filtered
         msg.pitch = self.pitch_filtered
         msg.yaw = self.yaw_filtered
+        print(f"self.throttle_filtered: {self.throttle_filtered}")
         msg.throttle =  self.throttle_filtered
         msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
-        print(f"msg.throttle: {msg.throttle}")
         self.manual_control_setpoint_publisher_.publish(msg)       
 
     def publish_tilt_angle_ref(self):
