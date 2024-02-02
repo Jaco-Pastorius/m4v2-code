@@ -9,37 +9,33 @@ from rclpy.clock import Clock
 from rclpy.qos import qos_profile_sensor_data
 
 from px4_msgs.msg import OffboardControlMode
-from px4_msgs.msg import TrajectorySetpoint
 from px4_msgs.msg import VehicleCommand
-from px4_msgs.msg import VehicleControlMode
-from px4_msgs.msg import ActuatorServos
+from px4_msgs.msg import TiltAngle
 from px4_msgs.msg import VehicleAttitudeSetpoint
 from px4_msgs.msg import InputRc
 
 from geometry_msgs.msg import PoseStamped
 
-
-from std_msgs.msg import Int32, Float32
-
 import numpy as np
-from scipy.interpolate import interp1d
 from copy import deepcopy
 
-class OffboardControl(Node):
+class DescentController(Node):
     def __init__(self):
-        super().__init__('OffboardControl')
+        super().__init__('descent_controller')
 
         # Subscriptions
         self.rc_input_subscriber_ = self.create_subscription(
                                             InputRc,
                                             '/fmu/out/input_rc',
-                                            self.listener_callback,
+                                            self.rc_listener_callback,
                                             qos_profile_sensor_data)
-        self.mocap_subscriber = self.create_subscription(
-                                            PoseStamped,
-                                            '/vrpn_mocap/m4_base/pose',
-                                            self.mocap_pose_callback,
-                                            10)
+        
+        # To Do: add mocap callback 
+        # self.mocap_subscriber = self.create_subscription(
+        #                                     PoseStamped,
+        #                                     '/vrpn_mocap/m4_base/pose',
+        #                                     self.mocap_pose_callback,
+        #                                     10)
 
 
         # Publishers
@@ -56,7 +52,7 @@ class OffboardControl(Node):
                                                         "/fmu/in/vehicle_attitude_setpoint", 
                                                         10)
         self.tilt_angle_ref_external_publisher   = self.create_publisher(
-                                                        Float32, 
+                                                        TiltAngle, 
                                                         "/tilt_angle_ref_external", 
                                                         10)
         
@@ -72,59 +68,87 @@ class OffboardControl(Node):
 
         # Desired thrust and tilt angle 
         self.throttle_desired       = 0.0
-        self.tilt_angle_desired   = 0.0
+        self.throttle_filtered      = 0.0
+        self.tilt_angle_desired     = 0.0
+
+        # previous desired throttle for low-pass filtering
+        self.throttle_desired_prev  = 0.0
+        self.alpha = 0.5                      # low pass filter gain
+
+        # Current descent speed 
+        self.zdot = 0.0
 
         # Descent logic
         self.land_begin = False
         self.t0_set = False
         self.land_interrupted = False
-            
+
+        # Controller parameters
+        self.m = 5.0   # kg
+        self.g = 9.81  # m/s/s
+        self.thrust_to_weight_ratio = 1.5 # be conservative to start out
+        self.Vsq = 0.5 # m/s : start with a low descent rate initially 
+
     def timer_callback(self):
         if (self.offboard_setpoint_counter_ == 10):
             # Change to Offboard mode after 10 setpoints
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1., 6.)
 
             # Arm the vehicle (vehicle should already be armed here)
-            # self.arm()
+            self.arm()  # DISABLE THIS WHEN DOING REAL TESTS: will already be in stabilize mode
 
         # Give offboard control mode the necessary heartbeat
         self.publish_offboard_control_mode()
 
-        # Compute desired tilt_angle 
-        self.compute_desired_tilt_angle()
+        if self.land_begin:
 
-        # Publish the desired tilt angle 
-        self.publish_tilt_angle_ref()
+            # Compute desired tilt_angle 
+            self.compute_desired_tilt_angle()
 
-        # Publish the desired throttle and roll, pitch, yaw (set these to zero)
-        self.publish_vehicle_attitude_setpoint()
+            # Publish the desired tilt angle 
+            self.publish_tilt_angle_ref()
+
+            # Publish the desired throttle and roll, pitch, yaw (set these to zero)
+            self.publish_vehicle_attitude_setpoint()
 
         # stop the counter after reaching 11
         if (self.offboard_setpoint_counter_ < 11):
             self.offboard_setpoint_counter_ += 1
 
-    def listener_callback(self, msg):
+    def rc_listener_callback(self, msg):
 
-        # get desired throttle here !
+        # get desired throttle and use a low pass filter to smooth out the inputs
+        self.throttle_desired_prev = deepcopy(self.throttle_desired)
+        self.throttle_desired = self.normalize(msg.values[2])
+        self.throttle_desired = self.alpha * self.throttle_desired + (1.0-self.alpha) * self.throttle_desired_prev
 
         if (msg.values[8] == self.max):
-            if not self.land_interrupted:
-                self.land_begin = True
-                if not self.t0_set:
-                    self.t0 = float(Clock().now().nanoseconds / 1e9)
-                    self.t0_set = True
-            else:
-                pass
+            self.land_begin = True
         else:
-            if self.land_begin:
-                self.land_interrupted = True
+            self.land_begin = False
 
     # Compute desired tilt angle
     def compute_desired_tilt_angle(self):
-        m = 5.0   # kg
-        g = 9.81  # m/s/s
-        Vsq = 0.5 # descent rate in m/s
-        self.tilt_angle_desired = np.arccos((m*g-m*(zdotk + Vsq)/self.Ts)/self.throttle_desired)
+
+        # set current descent velocity
+        zdotk = -self.Vsq # for test without optitrack (To Do: replace this with actual mocap values)
+
+        # convert desired throttle to desired thrust 
+        thrust_desired = self.throttle_to_thrust(self.throttle_desired)
+
+        # compute minimum allowable thrust
+        T_min = self.m*self.g - self.m*(zdotk+self.Vsq)/self.Ts
+
+        # filter desired thrust and throttle
+        thrust_filtered = deepcopy(thrust_desired)
+        self.throttle_filtered = deepcopy(self.throttle_desired)
+
+        if (thrust_desired < T_min) : 
+            self.throttle_filtered = self.thrust_to_throttle(T_min)
+            thrust_filtered = T_min
+
+        # compute the desired tilt angle 
+        self.tilt_angle_desired = np.arccos((self.m*self.g-self.m*(zdotk + self.Vsq)/self.Ts)/thrust_filtered)
 
     # Arm the vehicle
     def arm(self):
@@ -152,19 +176,19 @@ class OffboardControl(Node):
         msg.roll_body = 0.0
         msg.pitch_body = 0.0
         msg.yaw_body = 0.0 
-        msg.thrust_body = [0.0, 0.0, -self.throttle_desired]  # For clarification: For multicopters thrust_body[0] and thrust[1] are usually 0 and thrust[2] is the negative throttle demand.
-        msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
+        msg.thrust_body = [0.0, 0.0, -self.throttle_filtered]  # For clarification: For multicopters thrust_body[0] and thrust[1] are usually 0 and thrust[2] is the negative throttle demand.
+        msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
         self.vehicle_attitude_setpoint_publisher_.publish(msg)       
         
     def publish_tilt_angle_ref(self):
         if not self.land_interrupted:
-            msg = Float32()
-            msg.data = 0.0
+            msg = TiltAngle()
+            msg.value = 0.0
 
             if self.land_begin:
                 # get current time in seconds
                 t = Clock().now().nanoseconds / 1e9
-                msg.data = float(self.tilt_angle_desired)
+                msg.value = float(self.tilt_angle_desired)
 
             self.tilt_angle_ref_external_publisher.publish(msg)
         else:
@@ -189,10 +213,20 @@ class OffboardControl(Node):
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         self.vehicle_command_publisher_.publish(msg)
 
+    def normalize(self,rc_in):
+        return (rc_in-self.min)/(self.max-self.min)
+
+    def throttle_to_thrust(self,throttle):
+        return self.thrust_to_weight_ratio * self.m * self.g * throttle
+        
+    def thrust_to_throttle(self,thrust):
+        return thrust / self.thrust_to_weight_ratio * self.m * self.g
+
+
 def main(args=None):
     rclpy.init(args=args)
-    print("Starting offboard control node...\n")
-    offboard_control = OffboardControl()
+    print("Starting descent controller...\n")
+    offboard_control = DescentController()
     rclpy.spin(offboard_control)
     offboard_control.destroy_node()
     rclpy.shutdown()

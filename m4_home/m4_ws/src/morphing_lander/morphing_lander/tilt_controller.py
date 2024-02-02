@@ -1,3 +1,8 @@
+"""
+Python implementation of Tilt Controller
+
+"""
+
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
@@ -45,7 +50,7 @@ class TiltController(Node):
         # Initialize LS_in
         self.LS_in = 1514
 
-        # Manual vs automatic control
+        # Manual vs automatic control (start as manual because need to initalize encoder by bringing manually to drive and flipping the encoder switch)
         self.manual = True
 
         # Initialize current tilt_angle and tilt_angle_ref_external to zero
@@ -63,7 +68,7 @@ class TiltController(Node):
         self.rc.SetEncM2(self.address,0)
         self.reset_encoder = 0
 
-        # Set pin functions for motor 2 (M2) to go to zero when it reaches home
+        # Set pin functions for motor 2 (M2) to go to zero when it reaches home (limit switch)
         self.rc.SetPinFunctions(self.address,0x00,0x62,0x62)
 
         # Encoder data for tilt angle publishing        
@@ -105,7 +110,7 @@ class TiltController(Node):
         # set previous tilt angle
         self.tilt_angle_prev = deepcopy(self.tilt_angle)
         # set current tilt angle
-        self.tilt_angle_ref_external = msg.data # in degrees
+        self.tilt_angle_ref_external = msg.value # in degrees
 
     def timer_callback(self):
         if (self.reset_encoder == self.max):
@@ -164,7 +169,7 @@ class TiltController(Node):
         self.ei += self.Ts*e
 
         u = -self.kp*e - self.kd*ed - self.ki*self.ei
-        u = np.clip(u,-1,1)
+        u = np.clip(u,-1.0,1.0)
         print(f"u:{u}")
         if np.isfinite(u):
             print(f"u:{u}")
