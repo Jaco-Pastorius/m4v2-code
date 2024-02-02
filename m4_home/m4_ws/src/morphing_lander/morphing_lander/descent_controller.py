@@ -94,13 +94,23 @@ class DescentController(Node):
         self.thrust_to_weight_ratio = 1.5 # be conservative to start out
         self.Vsq = 0.5 # m/s : start with a low descent rate initially 
 
+        # arming flag 
+        self.arm_flag = False
+
     def timer_callback(self):
         if (self.offboard_setpoint_counter_ == 10):
             # Change to Offboard mode after 10 setpoints
             self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1., 6.)
 
-            # Arm the vehicle (vehicle should already be armed here)
+        # stop the counter after reaching 11
+        if (self.offboard_setpoint_counter_ < 11):
+            self.offboard_setpoint_counter_ += 1
+
+        # Arm the vehicle
+        if (self.arm_flag):
             self.arm()  
+        else:
+            self.disarm()
 
         # Give offboard control mode the necessary heartbeat
         self.publish_offboard_control_mode()
@@ -118,11 +128,13 @@ class DescentController(Node):
         # Publish the desired throttle and roll, pitch, yaw (set these to zero)
         self.publish_manual_control_setpoint()
 
-        # stop the counter after reaching 11
-        if (self.offboard_setpoint_counter_ < 11):
-            self.offboard_setpoint_counter_ += 1
-
     def rc_listener_callback(self, msg):
+
+        # get arm command
+        if (msg.values[6] == max):
+            self.arm_flag = True
+        else:
+            self.arm_flag = False
 
         # get desired throttle previous
         self.throttle_desired_prev = deepcopy(self.throttle_desired)
