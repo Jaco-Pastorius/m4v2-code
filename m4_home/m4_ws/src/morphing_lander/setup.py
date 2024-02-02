@@ -22,7 +22,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'offboard_control = morphing_lander.descent_controller:main',
+            'descent_controller = morphing_lander.descent_controller:main',
             'tilt_controller = morphing_lander.tilt_controller:main'
         ],
     },
