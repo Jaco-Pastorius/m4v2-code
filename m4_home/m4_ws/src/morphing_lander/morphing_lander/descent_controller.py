@@ -131,7 +131,7 @@ class DescentController(Node):
     def rc_listener_callback(self, msg):
 
         # get arm command
-        if (msg.values[6] == max):
+        if (msg.values[7] == max):
             self.arm_flag = True
         else:
             self.arm_flag = False
