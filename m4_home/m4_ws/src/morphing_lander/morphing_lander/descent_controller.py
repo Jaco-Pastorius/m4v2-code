@@ -13,7 +13,9 @@ from px4_msgs.msg import VehicleCommand
 from px4_msgs.msg import TiltAngle
 from px4_msgs.msg import ManualControlSetpoint
 from px4_msgs.msg import VehicleAttitudeSetpoint
+from px4_msgs.msg import VehicleRatesSetpoint
 from px4_msgs.msg import InputRc
+from px4_msgs.msg import VehicleAttitude
 
 from geometry_msgs.msg import PoseStamped
 
@@ -31,6 +33,13 @@ class DescentController(Node):
                                             self.rc_listener_callback,
                                             qos_profile_sensor_data)
         self.rc_input_subscriber_  # prevent unused variable warning
+
+        self.vehicle_attitude_subscriber_ = self.create_subscription(
+                                            VehicleAttitude,
+                                            '/fmu/out/vehicle_attitude',
+                                            self.vehicle_attitude_callback,
+                                            qos_profile_sensor_data)
+        self.vehicle_attitude_subscriber_  # prevent unused variable warning
 
         # To Do: add mocap callback 
         # self.mocap_subscriber = self.create_subscription(
@@ -57,6 +66,10 @@ class DescentController(Node):
                                                         VehicleAttitudeSetpoint, 
                                                         "/fmu/in/vehicle_attitude_setpoint", 
                                                         10)
+        self.vehicle_rates_setpoint_publisher_   = self.create_publisher(
+                                                        VehicleRatesSetpoint, 
+                                                        "/fmu/in/vehicle_rates_setpoint", 
+                                                        10)
         self.tilt_angle_ref_external_publisher   = self.create_publisher(
                                                         TiltAngle, 
                                                         "/tilt_angle_ref_external", 
@@ -64,7 +77,7 @@ class DescentController(Node):
         
         # Create timer
         self.offboard_setpoint_counter_ = 0
-        self.Ts = 0.2  # 20 Hz
+        self.Ts = 0.01  # 10 Hz
         self.timer_ = self.create_timer(self.Ts, self.timer_callback)
 
         # Set RC input limits
@@ -91,35 +104,47 @@ class DescentController(Node):
 
         # Descent logic
         self.filtering = False
-        self.t0_set = False
-        self.land_interrupted = False
 
         # Controller parameters
         self.m = 5.0   # kg
         self.g = 9.81  # m/s/s
         self.thrust_to_weight_ratio = 2.0 
-        self.Vsq = 0.5 # m/s : start with a low descent rate initially 
+        self.Vsq = 0.2 # m/s : start with a low descent rate initially 
 
         # arming flag 
         self.offboard_flag = False
         self.offboard    = False 
+        self.offboard_setpoint_counter_ = 0
+
 
     # usage: start in manual/stabilize mode and fly up. At that point flip the switch which will take you into offboard mode
     def timer_callback(self):
 
         # Go into offboard mode
         if (self.offboard_flag):
-            if not self.offboard:
-                # go to offboard mode
-                self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1., 6.)
-                self.offboard = True
-
-            # If already in offboard mode keep giving necessary heartbeat
+            # publish offboard mode heartbeat
             self.publish_offboard_control_mode()  
+
+            if not self.offboard:
+                if (self.offboard_setpoint_counter_ == 10):
+                    # go to offboard mode after 1 second
+                    self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1., 6.)
+
+                    # Arm the vehicle
+                    self.arm()
+
+                    # vehicle is now in offboard mode and armed
+                    self.offboard = True
+
+                # stop the counter after reaching 11
+                if (self.offboard_setpoint_counter_ < 11):
+                    self.offboard_setpoint_counter_ += 1
+
         else:
             if self.offboard:
-                # self.disarm()  # instead of disarming go back to stabilize mode
+                self.disarm()  
                 self.offboard = False 
+                self.offboard_setpoint_counter_ = 0
         
         if self.offboard:
 
@@ -133,12 +158,21 @@ class DescentController(Node):
                 self.publish_tilt_angle_ref()
 
             # Publish the desired throttle and roll, pitch, yaw (set these to zero)
+            # print("publishing vehicle rates setpoint")
+            # self.publish_vehicle_rates_setpoint()
+            # print("publishing manual control setpoint")
             # self.publish_manual_control_setpoint()
             print("publishing vehicle attitude setpoint")
             self.publish_vehicle_attitude_setpoint()
 
     def write_control_inputs(self):
         self.throttle_filtered = deepcopy(self.throttle_desired)
+        self.roll_filtered = deepcopy(self.roll_desired)
+        self.pitch_filtered = deepcopy(self.pitch_desired)
+        self.yaw_filtered = deepcopy(self.yaw_desired)
+
+    def vehicle_attitude_callback(self, msg):
+        self.roll,self.pitch,self.yaw = self.euler_from_quaternion([msg.q[1],msg.q[2],msg.q[3],msg.q[0]])
 
     def rc_listener_callback(self, msg):
 
@@ -218,23 +252,43 @@ class DescentController(Node):
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         self.offboard_control_mode_publisher_.publish(msg)
         
-    # def publish_manual_control_setpoint(self):
-    #     msg = ManualControlSetpoint()
-    #     msg.roll = self.roll_filtered
-    #     msg.pitch = self.pitch_filtered
-    #     msg.yaw = self.yaw_filtered
-    #     msg.throttle =  self.throttle_filtered
-    #     msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
-    #     self.manual_control_setpoint_publisher_.publish(msg)   
+    def publish_manual_control_setpoint(self):
+        msg = ManualControlSetpoint()
+        msg.roll = self.roll_filtered
+        msg.pitch = self.pitch_filtered
+        msg.yaw = self.yaw_filtered
+        msg.throttle =  self.throttle_filtered
+        msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
+        print(f"throttle:{msg.throttle}")
+        print(f"roll:{msg.roll}")
+        print(f"pitch:{msg.pitch}")
+        print(f"yaw:{msg.yaw}")
+
+        self.manual_control_setpoint_publisher_.publish(msg)   
         
     def publish_vehicle_attitude_setpoint(self):
         msg = VehicleAttitudeSetpoint()
-        msg.roll_body = 0.0
-        msg.pitch_body = 0.0
-        msg.yaw_body = 0.0
+        msg.q_d[0] = 1.0
+        msg.q_d[1] = 0.0
+        msg.q_d[2] = 0.0
+        msg.q_d[3] = 0.0
+
+        # msg.roll_body = 0.0
+        # msg.pitch_body = 0.0
+        # print(f"self.yaw: {self.yaw}")
+        # msg.yaw_body = self.yaw
         msg.thrust_body =  [0.0,0.0,-self.throttle_filtered]
         msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
         self.vehicle_attitude_setpoint_publisher_.publish(msg)   
+
+    def publish_vehicle_rates_setpoint(self):
+        msg = VehicleRatesSetpoint()
+        msg.roll = 0.0
+        msg.pitch = 0.0
+        msg.yaw = 0.0
+        msg.thrust_body =  [0.0,0.0,-self.throttle_filtered]
+        msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
+        self.vehicle_rates_setpoint_publisher_.publish(msg)   
 
     def publish_tilt_angle_ref(self):
         msg = TiltAngle()
@@ -260,6 +314,7 @@ class DescentController(Node):
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         self.vehicle_command_publisher_.publish(msg)
 
+    # VehicleAttitudeSetpoint conversions
     def normalize(self,rc_in):
         # returns values between -1 and 1 
         return (rc_in-self.min)/(self.max-self.min)
@@ -271,7 +326,7 @@ class DescentController(Node):
         return  thrust / self.thrust_to_weight_ratio * self.m * self.g 
 
 
-
+    # # ManualControlSetpoint conversion
     # def normalize(self,rc_in):
     #     # returns values between -1 and 1 
     #     return (rc_in-self.dead)/(self.max-self.dead)
@@ -283,7 +338,32 @@ class DescentController(Node):
     # def thrust_to_throttle(self,thrust):
     #     throttle = thrust / self.thrust_to_weight_ratio * self.m * self.g  # this is throttle from 0 to 1 
     #     throttle = throttle * 2.0 - 1.0                                    # convert back to -1,1 range 
-    #     return 
+    #     return throttle
+
+    def euler_from_quaternion(self, quaternion):
+        """
+        Converts quaternion (w in last place) to euler roll, pitch, yaw
+        quaternion = [x, y, z, w]
+        Bellow should be replaced when porting for ROS 2 Python tf_conversions is done.
+        """
+        x = quaternion[0]
+        y = quaternion[1]
+        z = quaternion[2]
+        w = quaternion[3]
+
+        sinr_cosp = 2 * (w * x + y * z)
+        cosr_cosp = 1 - 2 * (x * x + y * y)
+        roll = np.arctan2(sinr_cosp, cosr_cosp)
+
+        sinp = 2 * (w * y - z * x)
+        pitch = np.arcsin(sinp)
+
+        siny_cosp = 2 * (w * z + x * y)
+        cosy_cosp = 1 - 2 * (y * y + z * z)
+        yaw = np.arctan2(siny_cosp, cosy_cosp)
+
+        return roll, pitch, yaw
+
 
 
 def main(args=None):
