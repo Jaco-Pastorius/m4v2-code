@@ -71,8 +71,10 @@ class TiltController(Node):
         # Set pin functions for motor 2 (M2) to go to zero when it reaches home (limit switch)
         self.rc.SetPinFunctions(self.address,0x00,0x62,0x62)
 
-        # Encoder data for tilt angle publishing        
-        self.encoder_data = np.array([0,2518,4902,6813,8429,9396,10477,11156,13324,14293,15396,16820,17563,19043])
+        # Encoder data for tilt angle publishing (manually converting between data which was collected for encoder 44 from pololu to encoder 45. I should recalibrate)
+        counts_per_rev_45 = 2248.86
+        counts_per_rev_44 = 1632.67    
+        self.encoder_data = np.array([0,2518,4902,6813,8429,9396,10477,11156,13324,14293,15396,16820,17563,19043]) * counts_per_rev_45/counts_per_rev_44
         self.angle_data = np.array([88,85,78.4,70.7,62.7,57.3,51.2,47.1,33.8,27.9,21.3,12.7,8.3,0.5])
 
         # Declare ros2 parameters: control gains
