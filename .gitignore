@@ -1,3 +1,4 @@
-m4_home/m4_ws/build
-m4_home/m4_ws/install
-m4_home/m4_ws/log
+/m4_home/m4_ws/build
+/m4_home/m4_ws/install
+/m4_home/m4_ws/log
+**/rosbag2*
