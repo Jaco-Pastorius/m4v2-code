@@ -205,26 +205,25 @@ class DescentController(Node):
         zdotk = -self.Vsq # for test without optitrack (To Do: replace this with actual mocap values)
 
         # first low pass filter the desired throttle
-        self.throttle_desired = self.alpha * self.throttle_desired + (1.0-self.alpha) * self.throttle_desired_prev
+        # self.throttle_desired = self.alpha * self.throttle_desired + (1.0-self.alpha) * self.throttle_desired_prev
 
         # convert desired throttle to desired thrust 
         thrust_desired = self.throttle_to_thrust(self.throttle_desired)
 
         # compute minimum allowable thrust
         T_min = self.m*self.g - self.m*(zdotk+self.Vsq)/self.Ts
-
-        # filter desired thrust and throttle
+        
+        # filter desired thrust
         if (thrust_desired < T_min) : 
-            self.throttle_filtered = self.thrust_to_throttle(T_min)
             thrust_filtered = T_min
         else:
-            self.throttle_filtered = deepcopy(self.throttle_desired)
             thrust_filtered = deepcopy(thrust_desired)
-        
+
+        # get throttle from desired thrust 
+        self.throttle_filtered = self.thrust_to_throttle(thrust_filtered)
+
         # compute the desired tilt angle 
-        print(f"thrust_filtered: {thrust_filtered}")
         self.tilt_angle_desired = np.arccos((self.m*self.g-self.m*(zdotk + self.Vsq)/self.Ts)/thrust_filtered)
-        print(f"self.tilt_angle_desired:{np.rad2deg(self.tilt_angle_desired)}")
 
         # finally set roll pitch yaw filtered to zero
         self.roll_filtered  = 0.0
@@ -278,6 +277,7 @@ class DescentController(Node):
         # print(f"self.yaw: {self.yaw}")
         # msg.yaw_body = self.yaw
         msg.thrust_body =  [0.0,0.0,-self.throttle_filtered]
+        print(f"msg.thrust_body{msg.thrust_body}")
         msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
         self.vehicle_attitude_setpoint_publisher_.publish(msg)   
 
@@ -323,8 +323,7 @@ class DescentController(Node):
         return self.thrust_to_weight_ratio * self.m * self.g * throttle
         
     def thrust_to_throttle(self,thrust):
-        return  thrust / self.thrust_to_weight_ratio * self.m * self.g 
-
+        return  thrust / (self.thrust_to_weight_ratio * self.m * self.g)
 
     # # ManualControlSetpoint conversion
     # def normalize(self,rc_in):

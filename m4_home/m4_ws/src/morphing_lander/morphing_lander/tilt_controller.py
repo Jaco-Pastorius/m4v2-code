@@ -95,6 +95,9 @@ class TiltController(Node):
         # Initialize integral error
         self.ei = 0.0
 
+        # limit tilt_angle 
+        self.limit_tilt = 3.0 # degrees
+
     def rc_listener_callback(self, msg):
         # https://futabausa.com/wp-content/uploads/2018/09/18SZ.pdf
         self.LS_in = msg.values[9] # corresponds to LS trim selector on futaba T18SZ that I configured in the function menu
@@ -150,6 +153,12 @@ class TiltController(Node):
 
     def spin_motor(self, tilt_speed):
         # takes in a tilt_speed between -1 and 1 writes the pwm signal to the roboclaw 
+
+        # limit speed when reaching the limit tilt angle
+        if (self.tilt_angle < self.limit_tilt):
+            if (tilt_speed < 0) : tilt_speed = 0.0
+            else: pass  
+
         motor_speed = self.map_speed(abs(tilt_speed))
         if (tilt_speed < 0): # go up
             if motor_speed >= 127: 
