@@ -11,9 +11,7 @@ from rclpy.qos import qos_profile_sensor_data
 from px4_msgs.msg import OffboardControlMode
 from px4_msgs.msg import VehicleCommand
 from px4_msgs.msg import TiltAngle
-from px4_msgs.msg import ManualControlSetpoint
 from px4_msgs.msg import VehicleAttitudeSetpoint
-from px4_msgs.msg import VehicleRatesSetpoint
 from px4_msgs.msg import InputRc
 from px4_msgs.msg import VehicleAttitude
 
@@ -49,13 +47,11 @@ class DescentController(Node):
                                             qos_profile_sensor_data)
         self.tilt_angle_subscriber_  # prevent unused variable warning
 
-        # To Do: add mocap callback 
-        # self.mocap_subscriber = self.create_subscription(
-        #                                     PoseStamped,
-        #                                     '/vrpn_mocap/m4_base/pose',
-        #                                     self.mocap_pose_callback,
-        #                                     10)
-
+        self.mocap_subscriber = self.create_subscription(
+                                            PoseStamped,
+                                            '/vrpn_mocap/m4_base/pose',
+                                            self.mocap_pose_callback,
+                                            10)
 
         # Publishers
         self.offboard_control_mode_publisher_ = self.create_publisher(
@@ -187,6 +183,8 @@ class DescentController(Node):
         else:
             self.descent = False
 
+    def mocap_pose_callback(self, msg):
+        
     # Compute desired tilt angle
     def controller_update(self):
 
