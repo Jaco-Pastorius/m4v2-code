@@ -162,7 +162,7 @@ class DescentController(Node):
     def rc_listener_callback(self, msg):
 
         # set current desired descent speed (set this to right LR lever !!!!!!!!)
-        self.zdot_d = msg.value[]
+        # self.zdot_d = msg.value[]
 
         # get arm command
         if (msg.values[8] == self.max):
@@ -184,6 +184,7 @@ class DescentController(Node):
             self.descent = False
 
     def mocap_pose_callback(self, msg):
+        pass
         
     # Compute desired tilt angle
     def controller_update(self):

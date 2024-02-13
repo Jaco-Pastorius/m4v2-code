@@ -14,6 +14,7 @@ from px4_msgs.msg import TiltAngle
 from px4_msgs.msg import VehicleAttitudeSetpoint
 from px4_msgs.msg import InputRc
 from px4_msgs.msg import VehicleAttitude
+from px4_msgs.msg import StateEstimate
 
 from geometry_msgs.msg import PoseStamped
 
@@ -69,7 +70,11 @@ class AltitudeController(Node):
                                                         TiltAngle, 
                                                         "/tilt_angle_ref_external", 
                                                         10)
-        
+        self.state_estimate_publisher_   = self.create_publisher(
+                                                    StateEstimate, 
+                                                    "/state_estimate", 
+                                                    10)
+
         # Create timer
         self.offboard_setpoint_counter_ = 0
         self.Ts = 0.01  # 100 Hz
@@ -85,15 +90,16 @@ class AltitudeController(Node):
 
         # Throttle, roll, pitch, and yaw
         self.throttle      = 0.0
-        # self.roll          = 0.0
-        # self.pitch         = 0.0
-        # self.yaw           = 0.0
 
         # Current altitude, descent speed, desired descent speed, and tilt_angle
         self.z = 0.0
         self.zdot = 0.0
         self.zdot_d = 0.0
         self.tilt_angle = 0.0
+
+        # integrator error
+        self.ei = 0.0
+        self.ki = 0.1
 
         # Altitude control logic
         self.altitude = False
@@ -102,7 +108,7 @@ class AltitudeController(Node):
         self.m = 5.0   # kg
         self.g = 9.81  # m/s/s
         self.thrust_to_weight_ratio = 2.0 
-        self.k = 0.01 # controller gain
+        self.k = 1.0 # controller gain
 
         # arming flag 
         self.offboard_flag = False
@@ -147,7 +153,7 @@ class AltitudeController(Node):
 
             if self.altitude:
                 # Update state estimate
-                self.ekf(self.z, self.u) # use mocap measurement from optitrack
+                self.ekf(self.z, self.m*self.g) # use mocap measurement from optitrack  # should be self.u
 
                 # Update controller
                 self.controller_update()
@@ -167,7 +173,8 @@ class AltitudeController(Node):
     def rc_listener_callback(self, msg):
 
         # set current desired descent speed (set this to what normally controls pitch)
-        self.zdot_d = -self.normalize(msg.values[1])  # between -1 and 1 (pitch is inverted hence the minus sign)
+        self.zdot_d = -2*(self.normalize(msg.values[1])-0.5)  # between -1 and 1 (pitch is inverted hence the minus sign)
+        print(f"self.zdot_d: {self.zdot_d}")
 
         # get arm command
         if (msg.values[8] == self.max):
@@ -175,25 +182,20 @@ class AltitudeController(Node):
         else:
             self.offboard_flag = False
 
-        # get current desired throttle
-        # self.throttle = self.normalize(msg.values[2])
-        
-        # get current desired roll, pitch, yaw
-        # self.roll     = self.normalize(msg.values[0])
-        # self.pitch    = self.normalize(msg.values[1])
-        # self.yaw      = self.normalize(msg.values[3])
-
         if (msg.values[7] == self.max):
             self.altitude = True
         else:
             self.altitude = False
 
     def mocap_pose_callback(self, msg):
-        self.z = msg.position[2]
+        self.z = msg.pose.position.z    
         
     # Compute desired tilt angle
     def controller_update(self):
-        self.u = self.m * self.g - self.m * self.k * (self.zdot - self.zdot_d)  # control law on thrust
+        # self.u = self.m * self.g - self.m * self.k * (self.x[1] - self.zdot_d)  # control law on thrust
+        e = self.x[1] - self.zdot_d
+        self.ei += e*self.Ts
+        self.u = - self.k * e - self.ki * self.ei
         self.throttle = self.thrust_to_throttle(self.u)
 
     # Arm the vehicle
@@ -289,7 +291,7 @@ class AltitudeController(Node):
         return x[0]
 
     def ekf(self,z,u):
-        Q = np.diag([0.1,1.0])
+        Q = 0.1 * np.diag([1,1])
         R = 0.1
         F = np.array([[1,self.Ts],[0,1]])
         H = np.array([1,0])
@@ -301,9 +303,18 @@ class AltitudeController(Node):
         # Update 
         y = z - self.h(xkkm1)
         S = H @ Pkkm1 @ H.transpose() + R
-        K = Pkkm1 @ H.transpose() @ np.inv(S)
-        self.x = xkkm1 + K@y
+        invS = 1/S
+        K = Pkkm1 @ H.transpose() * invS
+        self.x = xkkm1 + K*y
         self.P = (np.eye(self.x.shape[0]) - K@H)@Pkkm1
+
+        # Publish state estimate
+        print(self.x)
+        msg = StateEstimate()
+        msg.state[0] = self.x[0]
+        msg.state[1] = self.x[1]
+        # msg.state[2] = self.x[2]
+        self.state_estimate_publisher_.publish(msg)
 
 
 def main(args=None):
