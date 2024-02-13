@@ -23,7 +23,8 @@ setup(
     entry_points={
         'console_scripts': [
             'descent_controller = morphing_lander.descent_controller:main',
-            'tilt_controller = morphing_lander.tilt_controller:main'
+            'tilt_controller = morphing_lander.tilt_controller:main',
+            'altitude_controller = morphing_lander.altitude_controller:main'
         ],
     },
 )
