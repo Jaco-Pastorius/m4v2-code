@@ -15,6 +15,7 @@ from px4_msgs.msg import VehicleAttitudeSetpoint
 from px4_msgs.msg import InputRc
 from px4_msgs.msg import VehicleAttitude
 from px4_msgs.msg import StateEstimate
+from px4_msgs.msg import VehicleLocalPosition
 
 from geometry_msgs.msg import PoseStamped
 
@@ -47,11 +48,12 @@ class AltitudeController(Node):
                                             qos_profile_sensor_data)
         self.tilt_angle_subscriber_  # prevent unused variable warning
 
-        self.mocap_subscriber = self.create_subscription(
-                                            PoseStamped,
-                                            '/vrpn_mocap/m4_base/pose',
-                                            self.mocap_pose_callback,
-                                            10)
+        self.vehicle_local_position_subscriber_ = self.create_subscription(
+                                            VehicleLocalPosition,
+                                            '/fmu/out/vehicle_local_position',
+                                            self.vehicle_local_position_callback,
+                                            qos_profile_sensor_data)
+        self.vehicle_local_position_subscriber_  # prevent unused variable warning
 
         # Publishers
         self.offboard_control_mode_publisher_ = self.create_publisher(
@@ -77,7 +79,7 @@ class AltitudeController(Node):
 
         # Create timer
         self.offboard_setpoint_counter_ = 0
-        self.Ts = 0.01  # 100 Hz
+        self.Ts = 0.1  # 100 Hz
         self.timer_ = self.create_timer(self.Ts, self.timer_callback)
 
         # Set RC input limits
@@ -97,9 +99,10 @@ class AltitudeController(Node):
         self.zdot_d = 0.0
         self.tilt_angle = 0.0
 
-        # integrator error
+        # controller gains
         self.ei = 0.0
-        self.ki = 0.1
+        self.ki = 0.0
+        self.k = 10.0
 
         # Altitude control logic
         self.altitude = False
@@ -108,7 +111,6 @@ class AltitudeController(Node):
         self.m = 5.0   # kg
         self.g = 9.81  # m/s/s
         self.thrust_to_weight_ratio = 2.0 
-        self.k = 1.0 # controller gain
 
         # arming flag 
         self.offboard_flag = False
@@ -122,6 +124,11 @@ class AltitudeController(Node):
 
     # usage: start in manual/stabilize mode and fly up. At that point flip the switch which will take you into offboard mode
     def timer_callback(self):
+
+        # run ekf 
+        # self.ekf(self.z,self.u)
+        # print(f"zdot:{self.zdot}")
+        # print(f"zdot_d:{self.zdot_d}")
 
         # Go into offboard mode
         if (self.offboard_flag):
@@ -150,19 +157,17 @@ class AltitudeController(Node):
                 self.offboard_setpoint_counter_ = 0
         
         if self.offboard:
-
+            pass 
             if self.altitude:
-                # Update state estimate
-                self.ekf(self.z, self.m*self.g) # use mocap measurement from optitrack  # should be self.u
-
+                pass
                 # Update controller
                 self.controller_update()
 
                 # Publish the desired tilt angle 
                 # self.publish_tilt_angle_ref()
 
-            print("publishing vehicle attitude setpoint")
-            self.publish_vehicle_attitude_setpoint()
+            # print("publishing vehicle attitude setpoint")
+            # self.publish_vehicle_attitude_setpoint()
 
     def vehicle_attitude_callback(self, msg):
         self.roll,self.pitch,self.yaw = self.euler_from_quaternion([msg.q[1],msg.q[2],msg.q[3],msg.q[0]])
@@ -172,9 +177,11 @@ class AltitudeController(Node):
 
     def rc_listener_callback(self, msg):
 
+        self.u = self.throttle_to_thrust(self.normalize(msg.values[2]))
+
         # set current desired descent speed (set this to what normally controls pitch)
-        self.zdot_d = -2*(self.normalize(msg.values[1])-0.5)  # between -1 and 1 (pitch is inverted hence the minus sign)
-        print(f"self.zdot_d: {self.zdot_d}")
+        self.zdot_d = 2*(self.normalize(msg.values[1])-0.5)  # between -1 and 1 (pitch is inverted hence the minus sign) (-1 means going up !!!)
+        # print(f"self.zdot_d: {self.zdot_d}")
 
         # get arm command
         if (msg.values[8] == self.max):
@@ -187,16 +194,16 @@ class AltitudeController(Node):
         else:
             self.altitude = False
 
-    def mocap_pose_callback(self, msg):
-        self.z = msg.pose.position.z    
+    def vehicle_local_position_callback(self, msg):
+        self.zdot = msg.vz
         
-    # Compute desired tilt angle
     def controller_update(self):
-        # self.u = self.m * self.g - self.m * self.k * (self.x[1] - self.zdot_d)  # control law on thrust
-        e = self.x[1] - self.zdot_d
+        e = - (self.zdot - self.zdot_d)
         self.ei += e*self.Ts
         self.u = - self.k * e - self.ki * self.ei
         self.throttle = self.thrust_to_throttle(self.u)
+
+        print(f"e:, throttle {e}, {self.throttle}")
 
     # Arm the vehicle
     def arm(self):
@@ -291,25 +298,33 @@ class AltitudeController(Node):
         return x[0]
 
     def ekf(self,z,u):
-        Q = 0.1 * np.diag([1,1])
-        R = 0.1
+        Q = 0.01 * np.diag([1,1])
+        R = 1e-5
         F = np.array([[1,self.Ts],[0,1]])
         H = np.array([1,0])
-        
+
+        print(f"u: {u}")
+        print(f"z: {z}")
+
         # Predict
         xkkm1 = self.f(self.x,u)
         Pkkm1 = F @ self.P @ F.transpose() + Q
+
+        print(f"xkkm1: {xkkm1}")
+        print(f"Pkkm1: {Pkkm1}")
 
         # Update 
         y = z - self.h(xkkm1)
         S = H @ Pkkm1 @ H.transpose() + R
         invS = 1/S
         K = Pkkm1 @ H.transpose() * invS
+        print(f"K: {K}")
         self.x = xkkm1 + K*y
         self.P = (np.eye(self.x.shape[0]) - K@H)@Pkkm1
 
         # Publish state estimate
-        print(self.x)
+        print(f"zhat: {self.x[0]}")
+        print(f"zdot_hat: {self.x[1]}")
         msg = StateEstimate()
         msg.state[0] = self.x[0]
         msg.state[1] = self.x[1]

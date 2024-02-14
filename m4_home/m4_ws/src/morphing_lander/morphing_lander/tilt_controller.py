@@ -96,7 +96,7 @@ class TiltController(Node):
         self.ei = 0.0
 
         # limit tilt_angle 
-        self.limit_tilt = 3.0 # degrees
+        self.limit_tilt = 0.5 # degrees
 
     def rc_listener_callback(self, msg):
         # https://futabausa.com/wp-content/uploads/2018/09/18SZ.pdf

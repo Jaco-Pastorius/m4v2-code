@@ -17,7 +17,7 @@ class MocapToVisualOdometry(Node):
             '/fmu/in/vehicle_visual_odometry',
             10)
 
-    def mocap_pose_callback(self, msg):
+    def mocap_pose_callback(self, msg): 
         # Process the PoseStamped message and publish to /fmu/in/vehicle_visual_odometry
 
         vehicle_odom_msg = VehicleOdometry()
@@ -34,7 +34,7 @@ class MocapToVisualOdometry(Node):
         vehicle_odom_msg.position = [msg.pose.position.x, msg.pose.position.z, -msg.pose.position.y]
 
         # Set orientation (using quaternion)
-        vehicle_odom_msg.q = [msg.pose.orientation.w, msg.pose.orientation.x, msg.pose.orientation.z, -msg.pose.orientation.y]
+        vehicle_odom_msg.q = [msg.pose.orientation.w, -msg.pose.orientation.z, msg.pose.orientation.x, -msg.pose.orientation.y]
 
         # Set velocity_frame (assuming NED for simplicity)
         vehicle_odom_msg.velocity_frame = 2
