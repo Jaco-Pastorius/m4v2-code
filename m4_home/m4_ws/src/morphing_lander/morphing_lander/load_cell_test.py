@@ -55,7 +55,7 @@ class LoadCellTest(Node):
 
         # Create timer
         self.offboard_setpoint_counter_ = 0
-        self.Ts = 0.1  # 10 Hz
+        self.Ts = 0.05  # 50 Hz
         self.timer_ = self.create_timer(self.Ts, self.timer_callback)
 
         # Set RC input limits
@@ -78,7 +78,7 @@ class LoadCellTest(Node):
         self.offboard_setpoint_counter_ = 0
 
         # Test throttle
-        self.test_throttle = 0.15
+        self.test_throttle = 0.40
 
     # usage: start in manual/stabilize mode and fly up. At that point flip the switch which will take you into offboard mode
     def timer_callback(self):
@@ -94,6 +94,7 @@ class LoadCellTest(Node):
                     self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1., 6.)
 
                     # Arm the vehicle
+                    self.publish_actuator_motors(0.0)  # zero throttle if switch is not on
                     self.arm()
 
                     # vehicle is now in offboard mode and armed
@@ -106,18 +107,13 @@ class LoadCellTest(Node):
         else:
             if self.offboard:
                 self.disarm()  
+                self.publish_actuator_motors(0.0)
                 self.offboard = False 
                 self.offboard_setpoint_counter_ = 0
         
         if self.offboard:
-            pass 
             if self.switch_on:
-                pass
-                # Write PWM signals to actuator controls
-                self.send_pwms()
-
-            # print("publishing vehicle attitude setpoint")
-            self.publish_vehicle_attitude_setpoint()
+                self.publish_actuator_motors(self.test_throttle)
 
     def tilt_angle_callback(self, msg):
         self.tilt_angle = msg.value
@@ -157,18 +153,18 @@ class LoadCellTest(Node):
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         self.offboard_control_mode_publisher_.publish(msg)
         
-    def publish_actuator_motors(self):
+    def publish_actuator_motors(self, throttle):
         msg = ActuatorMotors()
-        msg.control[0] = self.test_throttle
-        msg.control[1] = self.test_throttle
-        msg.control[2] = self.test_throttle
-        msg.control[3] = self.test_throttle
+        msg.control[0] = throttle
+        msg.control[1] = throttle
+        msg.control[2] = throttle
+        msg.control[3] = throttle
         msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
         self.actuator_motors_publisher_.publish(msg)   
 
-    def publish_tilt_angle_ref(self):
+    def publish_tilt_angle_ref(self, tilt_angle):
         msg = TiltAngle()
-        msg.value = np.rad2deg(self.tilt_angle_desired)
+        msg.value = np.rad2deg(tilt_angle)
         self.tilt_angle_ref_external_publisher.publish(msg)
     
     def publish_vehicle_command(self, command, param1=0.0, param2=0.0):

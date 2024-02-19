@@ -74,8 +74,11 @@ class TiltController(Node):
         # Encoder data for tilt angle publishing (manually converting between data which was collected for encoder 44 from pololu to encoder 45. I should recalibrate)
         counts_per_rev_45 = 2248.86
         counts_per_rev_44 = 1632.67    
-        self.encoder_data = np.array([0,2518,4902,6813,8429,9396,10477,11156,13324,14293,15396,16820,17563,19043]) * counts_per_rev_45/counts_per_rev_44
-        self.angle_data = np.array([88,85,78.4,70.7,62.7,57.3,51.2,47.1,33.8,27.9,21.3,12.7,8.3,0.5])
+        # self.encoder_data = np.array([0,2518,4902,6813,8429,9396,10477,11156,13324,14293,15396,16820,17563,19043]) * counts_per_rev_45/counts_per_rev_44
+        # self.angle_data = np.array([88,85,78.4,70.7,62.7,57.3,51.2,47.1,33.8,27.9,21.3,12.7,8.3,0.5])
+
+        self.encoder_data = np.array([0,3696,5551,7647,8886,10118,11062,11982,12846,13957,14885,15629,16549,17037,17749,19029,19645,20989,21453,22357,22989,23517,24013,24605,25437,25973,26325])
+        self.angle_data = np.array([90,86.6,84.0,78.6,74.2,70.5,66.5,63.5,59.7,55.3,51.3,48.0,44.2,41.8,38.4,32.8,30.0,24.2,22.0,18.0,14.8,12.9,10.8,8.2,4.7,2.8,0.8])
 
         # Declare ros2 parameters: control gains
         self.declare_parameters(
@@ -106,10 +109,11 @@ class TiltController(Node):
         self.reset_encoder = msg.values[12]
 
         # set manual or automatic control of tilt angle
-        if msg.values[7] == self.max:
-            self.manual = False
-        else:
-            self.manual = True
+        # for now always manual 
+        # if msg.values[7] == self.max:
+        #     self.manual = False
+        # else:
+        #     self.manual = True
 
     def tilt_angle_ref_external_listener_callback(self, msg):
         # set previous tilt angle
@@ -125,6 +129,7 @@ class TiltController(Node):
         enc_count = self.rc.ReadEncM2(self.address)
         self.tilt_angle =  float(np.interp(enc_count[1],self.encoder_data,self.angle_data))
         print(f"tilt angle is: {self.tilt_angle}")
+        # print(f"encoder count is: {enc_count}")
 
         # publish tilt angle
         msg = TiltAngle()
