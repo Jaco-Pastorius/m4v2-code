@@ -24,7 +24,8 @@ setup(
         'console_scripts': [
             'descent_controller = morphing_lander.descent_controller:main',
             'tilt_controller = morphing_lander.tilt_controller:main',
-            'altitude_controller = morphing_lander.altitude_controller:main'
+            'altitude_controller = morphing_lander.altitude_controller:main',
+            'sim_controller = morphing_lander.sim_controller:main'
         ],
     },
 )
