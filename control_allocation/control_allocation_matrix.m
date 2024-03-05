@@ -11,7 +11,7 @@ phi_data = [0,10,20,30,40,50,60,70,80,90];
 thrust_data = [1,1,0.95,0.9,0.83,0.75,0.73,0.68,0.52,0.4];
 
 % test angle
-phi_test = deg2rad(88);
+phi_test = deg2rad(0);
 
 % automatically generate positions
 p1 = [lx;d2+d3*cos(phi);d3*sin(phi)];
@@ -51,7 +51,7 @@ A_px4(4,:) = [moment4,thrust4];
 
 % CLOCKWISE ROTATION IN PX4 means positive kM
 
-A_px4_num = vpa(subs(A_px4, [phi,cT,kM0,kM1,kM2,kM3,lx,ly,d2,d3],[phi_test,6.5,0.05,0.05,-0.05,-0.05,0.16,0.21,0.0775,0.1325]));
+A_px4_num = vpa(subs(A_px4, [phi,cT,kM0,kM1,kM2,kM3,lx,ly,d2,d3],[phi_test,29.0,0.05,0.05,-0.05,-0.05,0.16,0.21,0.0775,0.1325]));
 
 axis1_num = vpa(subs(axis1,phi,phi_test));
 axis2_num = vpa(subs(axis2,phi,phi_test));

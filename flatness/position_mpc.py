@@ -281,9 +281,9 @@ if __name__ == "__main__":
     tf = 4.0
     dt = 0.02
     timepts = np.arange(0, tf+dt, dt)
-    t_horizon = 4.0
+    t_horizon = 0.5
 
-    N = 10
+    N = 3
 
     # define the optimal control problem 
     ocp = positionOCP(timepts,positionMPC(N), t_horizon)
