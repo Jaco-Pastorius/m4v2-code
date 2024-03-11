@@ -2,8 +2,15 @@ import rclpy
 from rclpy.node import Node
 from px4_msgs.msg import VehicleCommand
 from px4_msgs.msg import OffboardControlMode
+from px4_msgs.msg import TrajectorySetpoint
+from px4_msgs.msg import TiltAngle
 from px4_msgs.msg import VehicleThrustSetpoint
 from px4_msgs.msg import VehicleTorqueSetpoint
+from px4_msgs.msg import VehicleLocalPosition
+from px4_msgs.msg import VehicleAttitude
+from px4_msgs.msg import VehicleAttitudeSetpoint
+from px4_msgs.msg import VehicleAngularVelocity
+
 from px4_msgs.msg import VehicleOdometry
 
 from rclpy.clock import Clock
@@ -22,48 +29,13 @@ from IPython import embed
 import time 
 
 # control allocation matrix
-M = array([[-6.09,  6.09,  6.09, -6.09],
-          [4.64,  -4.64, 4.64,  -4.64],
-          [2.61, 2.61,  -2.61,  -2.61],
-          [-29.  , -29.  , -29.  , -29.]])
-
-torque_max_x = np.sum(np.abs(M[0,:]))/2
-torque_max_y = np.sum(np.abs(M[1,:]))/2
-torque_max_z = np.sum(np.abs(M[2,:]))/2
-thrust_max   = np.sum(M[3,:])
-
-# model variables
-w = 0.0775
-d = 0.1325
-l = 0.16
-m = 3.5
-g = 9.81
-
-J = SX.zeros(3,3)
-J[0,0] = 0.07
-J[1,1] = 0.01
-J[2,2] = 0.007
-Jinv =  SX.zeros(3,3)
-Jinv[0,0] = 1.0/J[0,0]
-Jinv[1,1] = 1.0/J[1,1]
-Jinv[2,2] = 1.0/J[2,2]
-
-# reference states
-X0 = np.array([0,0,0,0,0,0,0,0,0,0])  # initial states
-X_ref = np.array([0.0,0.0,0.0,0,0,0,0,0,0,0])  # reference states
-U_ref = np.array([0.5,0.5,0.5,0.5]) # reference inputs
-
-# cost function
-Q_mat = np.diag([10,10,10,1,1,1,1,1,1,1])
-R_mat = 1e-1 * np.diag([1,1,1,1])
-
-# collocation parametrs
-N_horizon = 40  # Define the number of discretization steps
-T_horizon = 4.0 # Define the prediction horizon
-u_max = 1.0     # Define the input allowed
-vx_max = 1.0     # Max allowable velocity
-vy_max = 1.0     # Max allowable velocity
-vz_max = 0.3     # Max allowable velocity
+M = np.array([
+    [-6.09,  4.64,  1.45, 29.0],
+    [ 6.09, -4.64,  1.45, 29.0],
+    [ 6.09,  4.64, -1.45, 29.0],
+    [-6.09, -4.64, -1.45, 29.0]
+])
+M = M.transpose()
 
 def eulzyx2rot(phi,th,psi):
     R = SX.zeros(3,3)
@@ -143,44 +115,52 @@ def export_robot_model() -> AcadosModel:
 
     # parameters
     varphi = SX.sym("varphi",1)
-    psi    = SX.sym("psi",1)
-    oz     = SX.sym("oz",1)
+    w = 0.0775
+    d = 0.1325
+    l = 0.16
+    m = 3.283
+    g = 9.81
 
-    # parameters
-    p = vertcat(varphi,psi,oz)
-
+    J = SX.zeros(3,3)
+    J[0,0] = 0.002
+    J[1,1] = 0.008
+    J[2,2] = 0.007
+    Jinv =  SX.zeros(3,3)
+    Jinv[0,0] = 1.0/0.002
+    Jinv[1,1] = 1.0/0.008
+    Jinv[2,2] = 1.0/0.007
+    
     # states
-    x = SX.sym("x",10)
-    x_ = x[0]
-    y_ = x[1]
-    z = x[2]
-    dx_ = x[3]
-    dy = x[4]
-    dz = x[5]
-    phi = x[6]
-    th = x[7]
-    ox = x[8]
-    oy = x[9]
+    x = SX.sym("x",8)
+    z = x[0]
+    dz = x[1]
+    phi = x[2]
+    th = x[3]
+    psi = x[4]
+    ox = x[5]
+    oy = x[6]
+    oz = x[7]
 
     # controls
     u = SX.sym("u",4)
 
     # xdot
-    x_dot = SX.sym("x_dot")
-    y_dot = SX.sym("y_dot")
     z_dot = SX.sym("z_dot")
-    dx_dot = SX.sym("dx_dot")
-    dy_dot = SX.sym("dy_dot")
     dz_dot = SX.sym("dz_dot")
     phi_dot = SX.sym("phi_dot")
     th_dot = SX.sym("th_dot")
+    psi_dot = SX.sym("psi_dot")
     ox_dot = SX.sym("ox_dot")
     oy_dot = SX.sym("oy_dot")
+    oz_dot = SX.sym("oz_dot")
 
-    xdot = vertcat(x_dot,y_dot,z_dot,dx_dot,dy_dot,dz_dot,phi_dot,th_dot,ox_dot,oy_dot)
+    xdot = vertcat(z_dot,dz_dot,phi_dot,th_dot,psi_dot,ox_dot,oy_dot,oz_dot)
 
     # algebraic variables
     # z = None
+
+    # parameters
+    p = varphi
 
     # dynamics
     wrench = M @ u
@@ -193,7 +173,7 @@ def export_robot_model() -> AcadosModel:
 
     fB = SX.zeros(3,1)   
     fB[1] = F*sin(varphi)
-    fB[2] = T*cos(varphi)
+    fB[2] = -T*cos(varphi)
 
     # z is pointing down dynamics
     pdd = 1/m * R@fB + vertcat(0,0,g)
@@ -201,7 +181,7 @@ def export_robot_model() -> AcadosModel:
     od = Jinv@(tau - cross(o,J@o))
 
     # finally write dynamics
-    f_expl = vertcat(dx_,dy,dz,pdd[0],pdd[1],pdd[2],chid[2],chid[1],od[0],od[1])
+    f_expl = vertcat(dz,pdd[2],chid[2],chid[1],chid[0],od[0],od[1],od[2])
     f_impl = xdot - f_expl
 
     model = AcadosModel()
@@ -217,6 +197,11 @@ def export_robot_model() -> AcadosModel:
 
     return model
 
+X0 = np.array([0,0,0,0,0,0,0,0])  # Intitialize the states
+N_horizon = 20  # Define the number of discretization steps
+T_horizon = 1.0 # Define the prediction horizon
+u_max = 1.0  # Define the max force allowed
+
 def create_ocp_solver_description() -> AcadosOcp:
     # create ocp object to formulate the OCP
     ocp = AcadosOcp()
@@ -229,6 +214,10 @@ def create_ocp_solver_description() -> AcadosOcp:
 
     # set dimensions
     ocp.dims.N = N_horizon
+
+    # set cost
+    Q_mat = np.diag([10,1,1,10,1,1,1,1])
+    R_mat = 1e-5* np.diag([1,1,1,1])
 
     ocp.cost.cost_type = "LINEAR_LS"
     ocp.cost.cost_type_e = "LINEAR_LS"
@@ -256,15 +245,10 @@ def create_ocp_solver_description() -> AcadosOcp:
     ocp.constraints.ubu = np.array([+1,+1,+1,+1])
     ocp.constraints.idxbu = np.array([0,1,2,3])
 
-    ocp.constraints.lbx = np.array([-vx_max,-vy_max,-vz_max])
-    ocp.constraints.ubx = np.array([+vx_max,+vy_max,+vz_max])
-    ocp.constraints.idxbx = np.array([3,4,5])    
-
-    # set initial state
     ocp.constraints.x0 = X0
 
     # set parameters
-    ocp.parameter_values = np.zeros((3,))
+    ocp.parameter_values = np.zeros((1,))
 
     # set options
     ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"  # FULL_CONDENSING_QPOASES
@@ -285,32 +269,58 @@ class OffboardControl(Node):
         super().__init__('OffboardControl')
         self.vehicle_command_publisher_ = self.create_publisher(VehicleCommand, "/fmu/in/vehicle_command", 10)
         self.offboard_control_mode_publisher_ = self.create_publisher(OffboardControlMode, "/fmu/in/offboard_control_mode", 10)
+        self.trajectory_setpoint_publisher_   = self.create_publisher(TrajectorySetpoint, "/fmu/in/trajectory_setpoint", 10)
         self.thrust_publisher_   = self.create_publisher(VehicleThrustSetpoint, "/fmu/in/vehicle_thrust_setpoint", 10)
         self.torque_publisher_   = self.create_publisher(VehicleTorqueSetpoint, "/fmu/in/vehicle_torque_setpoint", 10)
+        self.tilt_angle_publisher_ = self.create_publisher(TiltAngle, "/fmu/in/tilt_angle", 10)
+        self.vehicle_attitude_setpoint_publisher_   = self.create_publisher(VehicleAttitudeSetpoint,"/fmu/in/vehicle_attitude_setpoint", 10)
 
         # subscribers
-        self.vehicle_odometry_subscriber = self.create_subscription(
-                                            VehicleOdometry,
-                                            '/fmu/out/vehicle_odometry',
-                                            self.vehicle_odometry_callback,
+        self.vehicle_local_position_subscriber_ = self.create_subscription(
+                                    VehicleLocalPosition,
+                                    '/fmu/out/vehicle_local_position',
+                                    self.vehicle_local_position_callback,
+                                    qos_profile_sensor_data)
+        self.vehicle_local_position_subscriber_  # prevent unused variable warning
+
+        self.vehicle_attitude_subscriber_ = self.create_subscription(
+                                            VehicleAttitude,
+                                            '/fmu/out/vehicle_attitude',
+                                            self.vehicle_attitude_callback,
                                             qos_profile_sensor_data)
-        self.vehicle_odometry_subscriber  # prevent unused variable warning
+        self.vehicle_attitude_subscriber_  # prevent unused variable warning
+
+        self.vehicle_angular_velocity_subscriber_ = self.create_subscription(
+                                            VehicleAngularVelocity,
+                                            '/fmu/out/vehicle_angular_velocity',
+                                            self.vehicle_angular_velocity_callback,
+                                            qos_profile_sensor_data)
+        
+        self.vehicle_attitude_subscriber_  # prevent unused variable warning
 
         self.offboard_setpoint_counter_ = 0
-        self.Ts = 0.01
+        self.Ts = 0.02
         self.timer_ = self.create_timer(self.Ts, self.timer_callback)
 
         # Controller parameters
-        self.m = m   # kg
-        self.g = g  # m/s/s
-        self.thrust_to_weight_ratio = thrust_max/m*g
+        self.m = 3.283   # kg
+        self.g = 9.81  # m/s/s
+        self.thrust_to_weight_ratio = 3.66
 
-        self.w = w
-        self.d = d
-        self.l = l
+        self.w = 0.0775
+        self.d = 0.1325
+        self.l = 0.16
 
         # Current altitude, descent speed, desired descent speed, and tilt_angle
-        self.state = np.zeros(12)
+        self.x,self.y,self.z = 0.0,0.0,0.0
+        self.dx,self.dy,self.dz = 0.0,0.0,0.0
+        
+        # Current attitude
+        self.phi,self.th,self.psi = 0.0,0.0,0.0
+        self.ox, self.oy, self.oz = 0.0,0.0,0.0
+
+        # tilt angle
+        self.tilt_angle = 0.0
 
         # create solver
         self.ocp = create_ocp_solver_description()
@@ -323,30 +333,27 @@ class OffboardControl(Node):
 
         self.xcurrent = X0
 
-        # current commanded thrust and torque
-        self.thrust_body = [0,0,0]
-        self.torque = [0,0,0]
-
         # initialize solver
         for stage in range(N_horizon + 1):
-            self.acados_ocp_solver.set(stage, "x", X0)
+            self.acados_ocp_solver.set(stage, "x", 0.0 * np.ones(self.xcurrent.shape))
         for stage in range(N_horizon):
-            self.acados_ocp_solver.set(stage, "u", U_ref)
+            self.acados_ocp_solver.set(stage, "u", np.zeros((self.nu,)))
 
-    def vehicle_odometry_callback(self, msg):
-        # get state from odometry
-        p = msg.position
-        phi,th,psi = self.euler_from_quaternion([msg.q[1],msg.q[2],msg.q[3],msg.q[0]])
-        v = msg.velocity
-        o = msg.angular_velocity
-        self.state = np.array([p[0],p[1],p[2],v[0],v[1],v[2],phi,th,o[0],o[1]])
-        self.parameters = np.array([0.0,psi,o[2]])
-        # print(f"state: {self.state}")
-        print(f"phi,th,psi: {phi:.2f},{th:.2f},{psi:.2f}".format())
-        print(f"x,y,z: {p[0]:.2f},{p[1]:.2f},{p[2]:.2f}".format())
-        # print(f"R: {eulzyx2rot(phi,th,psi)}")
-        # run mpc
-        self.mpc_update()
+    def vehicle_attitude_callback(self, msg):
+        self.phi,self.th,self.psi = self.euler_from_quaternion([msg.q[1],msg.q[2],msg.q[3],msg.q[0]])
+        print(f"attitude:({self.phi},{self.th},{self.psi})")
+
+    def vehicle_angular_velocity_callback(self, msg):
+        self.ox,self.oy,self.oz = msg.xyz[0],msg.xyz[1],msg.xyz[2]
+
+    def vehicle_local_position_callback(self, msg):
+        self.x = msg.x
+        self.y = msg.y
+        self.z = msg.z
+        self.dx = msg.vx
+        self.dy = msg.vy
+        self.dz = msg.vz
+        print(f"position:({self.x},{self.y},{self.z})")
 
     def timer_callback(self):
         if (self.offboard_setpoint_counter_ == 10):
@@ -359,23 +366,28 @@ class OffboardControl(Node):
         # Offboard_control_mode heartbeat
         self.publish_offboard_control_mode()
 
+        # run mpc
+        self.mpc_update()
+
         # stop the counter after reaching 11
         if (self.offboard_setpoint_counter_ < 11):
             self.offboard_setpoint_counter_ += 1
 
     def mpc_update(self):
         start_time = time.process_time()
+        state = np.array([self.z,self.dz,self.phi,self.th,0.0,self.ox,self.oy,0.0])
+        varphi = self.tilt_angle
 
         # set initial state constraint
-        self.acados_ocp_solver.set(0, "lbx", self.state)
-        self.acados_ocp_solver.set(0, "ubx", self.state)
+        self.acados_ocp_solver.set(0, "lbx", state)
+        self.acados_ocp_solver.set(0, "ubx", state)
 
         # update yref
         for j in range(N_horizon):
-            yref = np.hstack((X_ref,U_ref))
+            yref = np.array([-1, 0, 0, 0, 0, 0, 0, 0, 0,0,0,0])
             self.acados_ocp_solver.set(j, "yref", yref)  # set yref
-            self.acados_ocp_solver.set(j, "p", self.parameters)   # set parameters
-        yref_N = X_ref
+            self.acados_ocp_solver.set(j, "p", varphi)   # set parameter
+        yref_N = np.array([-1, 0, 0, 0, 0, 0, 0, 0])
         self.acados_ocp_solver.set(N_horizon, "yref", yref_N)
 
         # solve ocp
@@ -383,26 +395,27 @@ class OffboardControl(Node):
 
         # get first input
         u_opt = self.acados_ocp_solver.get(0, "u")      
-        wrench = M@u_opt
+        # x_opt = self.acados_ocp_solver.get(0, "x")      
 
-        self.torque = [wrench[0]/torque_max_x,wrench[1]/torque_max_y,wrench[2]/torque_max_z]
-        self.thrust_body = [0.0,0,-wrench[3]/thrust_max]
+        print(f"u_opt={u_opt}")
+        # print(f"x_opt={x_opt}")
 
+        # u = np.array([[1,1,1,1],[-1,1,-1,1] ,[-1,-1,1,1],[1,-1,-1,1]]) @ u_opt
+        # input_current = np.array([[0, self.w+ self.d*cos(varphi),0,0],[0,0, self.l*cos(varphi),0],[0,0,0, self.l*sin(varphi)],[1,0,0,0]]) @ u
+
+        input_current = M@u_opt
+
+        torque = [input_current[0]/12.18,input_current[1]/9.28,input_current[2]/2.9]
+        thrust_body = [0.0,0,-input_current[3]/116.0]
         # torque = [0,0,0]
-        # thrust_body = [0.0,0,0.0]
+        # thrust_body = [0,0,-1]
 
-        print(f"torque: {self.torque}")
-        print(f"thrust: {self.thrust_body}")
+        print(f"torque: {torque}")
+        print(f"thrust: {thrust_body}")
 
-        # print the predicted next state
-        x_opt = self.acados_ocp_solver.get(0, "x")  
-        print("x_opt: {}".format(x_opt))    
-
-
-        # Publish current commanded thrust and torque by MPC controller
-        self.publish_vehicle_thrust_and_torque_setpoint(self.torque,self.thrust_body)
-
+        self.publish_vehicle_thrust_and_torque_setpoint(torque,thrust_body)
         print("* comp time = %5g seconds\n" % (time.process_time() - start_time))
+
 
     def arm(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
@@ -417,6 +430,13 @@ class OffboardControl(Node):
         msg.thrust_and_torque = True
         msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
         self.offboard_control_mode_publisher_.publish(msg)
+
+    def publish_trajectory_setpoint(self):
+        msg = TrajectorySetpoint()
+        msg.position = [0.0, 0.0, -2.5] 
+        msg.yaw = 1.57 # [-PI:PI]
+        msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
+        self.trajectory_setpoint_publisher_.publish(msg)
 
     def publish_vehicle_thrust_and_torque_setpoint(self,torque,thrust):
         msg_thrust = VehicleThrustSetpoint()
@@ -435,6 +455,26 @@ class OffboardControl(Node):
         msg_torque.timestamp = timestamp 
         self.thrust_publisher_.publish(msg_thrust)
         self.torque_publisher_.publish(msg_torque)
+
+    def publish_vehicle_attitude_setpoint(self,q_desired,thrust_body):
+        msg = VehicleAttitudeSetpoint()
+        msg.q_d[0] = q_desired[0]
+        msg.q_d[1] = q_desired[1]
+        msg.q_d[2] = q_desired[2]
+        msg.q_d[3] = q_desired[3]
+
+        msg.thrust_body =  thrust_body
+        print(f"thrust_body = ({thrust_body[0]},{thrust_body[1]},{thrust_body[2]})")
+        msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
+        self.vehicle_attitude_setpoint_publisher_.publish(msg)   
+
+    def publish_tilt_angle(self, tilt_vel):
+        self.tilt_angle += self.Ts * tilt_vel
+
+        msg = TiltAngle()
+        msg.value = np.clip(self.tilt_angle,0.0,45)
+        msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
+        self.tilt_angle_publisher_.publish(msg)
 
     def publish_vehicle_command(self, command, param1=0.0, param2=0.0):
         msg = VehicleCommand()
@@ -471,14 +511,29 @@ class OffboardControl(Node):
         cosy_cosp = 1 - 2 * (y * y + z * z)
         yaw = np.arctan2(siny_cosp, cosy_cosp)
 
-        return roll, pitch, yaw    
-    
+        return roll, pitch, yaw    # def torque_normalized(self,torque):
+    #     max_force_per_side = f_max*2
+    #     max_torque = max_force_per_side * (self.w+self.d)
+    #     return np.clip(torque/max_torque,-1.0,1.0)
+
     def quaternion_from_euler(self,phi,th,psi):
         w = cos(phi/2)*cos(th/2)*cos(psi/2) + sin(phi/2)*sin(th/2)*sin(psi/2)
         x = sin(phi/2)*cos(th/2)*cos(psi/2) - cos(phi/2)*sin(th/2)*sin(psi/2)
         y = cos(phi/2)*sin(th/2)*cos(psi/2) + sin(phi/2)*cos(th/2)*sin(psi/2)
         z = cos(phi/2)*cos(th/2)*sin(psi/2) - sin(phi/2)*sin(th/2)*cos(psi/2)
         return np.array([w,x,y,z])
+
+    def throttle_to_thrust(self,throttle):
+        return self.thrust_to_weight_ratio * self.m * self.g * throttle
+        
+    # def torque_normalized(self,torque):
+    #     max_force_per_side = f_max*2
+    #     max_torque = max_force_per_side * (self.w+self.d)
+    #     return np.clip(torque/max_torque,-1.0,1.0)
+
+    def thrust_to_throttle(self,thrust):
+        # return  np.clip(thrust / (self.thrust_to_weight_ratio * self.m * self.g),0.0,1.0)
+        return  np.clip(thrust/26.0,0.0,1.0)
 
 def main(args=None):
     rclpy.init(args=args)

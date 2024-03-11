@@ -22,11 +22,11 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'descent_controller = morphing_lander.descent_controller:main',
-            'tilt_controller = morphing_lander.tilt_controller:main',
-            'altitude_controller = morphing_lander.altitude_controller:main',
-            'sim_controller_acados = morphing_lander.sim_controller_acados:main',
-            'load_cell_test = morphing_lander.load_cell_test:main'
+            'tilt_velocity_controller = morphing_lander.tilt_velocity_controller:main',
+            'mpc_controller = morphing_lander.mpc_controller:main',
+            'mpc_controller_sim = morphing_lander.mpc_controller_sim:main',
+            'load_cell_test = morphing_lander.load_cell_test:main',
+            'relay_mocap = morphing_lander.relay_mocap:main'
         ],
     },
 )
