@@ -7,7 +7,7 @@ import numpy as np
 
 # reference states
 X0 = np.array([0,0,-2.5,0,0,0,0,0,0,0,0,0,0])                 # initial states (gets overwritten)
-X_ref = np.array([0,0,0.10,0.0,1.0,0,0,0,0,0,0,0,np.pi/2])    # reference states
+X_ref = np.array([0,0,0.10,0.0,0.0,0,0,0,0,0,0,0,np.pi/2])    # reference states
 U_ref = np.array([0.0,0.0,0.0,0.0,0.0])                       # reference inputs
 
 # cost function

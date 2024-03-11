@@ -6,6 +6,16 @@ import time
 import matplotlib.pyplot as plt
 from acados_template import latexify_plot
 from IPython import embed
+from matplotlib.backends.backend_pdf import PdfPages
+import os
+
+def multipage(filename, figs=None, dpi=200):
+    pp = PdfPages(filename)
+    if figs is None:
+        figs = [plt.figure(n) for n in plt.get_fignums()]
+    for fig in figs:
+        fig.savefig(pp, format='pdf')
+    pp.close()
 
 from morphing_lander_mpc import *
 
@@ -52,7 +62,7 @@ def plot_robot(
 
     control_lables = [r"$u_1$", r"$u_2$",r"$u_3$", r"$u_4$", r"v"]
 
-    plt.figure()
+    f1 = plt.figure()
     for i in range(nu):
         plt.subplot(nu, 1, i+1)
         (line,) = plt.step(t, np.append([U[0, i]], U[:, i]))
@@ -71,7 +81,7 @@ def plot_robot(
 
 
     states_lables = [r"$x$",r"$y$",r"$z$", r"$\psi$", r"$ \theta $", r"$ \phi $", r"$\dot x$",r"$\dot y$", r"$\dot z$",r"$\omega_x$", r"$\omega_y$",r"$\omega_z$",r"φ"]
-    plt.figure(figsize=(10, 6))
+    f2 = plt.figure(figsize=(10, 6))
 
     X_true[:,12] = np.rad2deg(X_true[:,12])
 
@@ -114,7 +124,7 @@ def plot_robot(
             plt.ylim([-0.1, 0.1])
     # plt.subplots_adjust(left=None, bottom=None, right=None, top=None, hspace=0.4)
     
-    plt.figure()
+    f3 = plt.figure()
     (line,) = plt.plot(t, X_true[:, -1], label="true")
     plt.ylabel(states_lables[-1])
     plt.xlabel("$t$")
@@ -123,6 +133,8 @@ def plot_robot(
 
     if plt_show:
         plt.show()
+    else:
+       multipage(os.getenv("HOME") + '/m4v2-code/test_mpc.pdf')
 
 def closed_loop_simulation():
 
@@ -205,7 +217,7 @@ def closed_loop_simulation():
 
     # plot results
     plot_robot(
-        np.linspace(0, T_horizon / N_horizon * Nsim, Nsim + 1), [None, None, None, None, None], simU, simX,latexify=True
+        np.linspace(0, T_horizon / N_horizon * Nsim, Nsim + 1), [None, None, None, None, None], simU, simX,latexify=True,plt_show=False
     )
 
 if __name__ == "__main__":
