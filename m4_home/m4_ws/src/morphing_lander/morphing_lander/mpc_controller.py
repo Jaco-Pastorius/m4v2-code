@@ -30,6 +30,7 @@ class OffboardControl(Node):
         self.offboard_control_mode_publisher_ = self.create_publisher(OffboardControlMode, "/fmu/in/offboard_control_mode", 10)
         self.actuator_motors_publisher_       = self.create_publisher(ActuatorMotors, "/fmu/in/actuator_motors", 10)
         self.tilt_vel_publisher_              = self.create_publisher(TiltVel, "/tilt_vel", 10)
+        self.trajectory_setpoint_publisher_   = self.create_publisher(TrajectorySetpoint, "/fmu/in/trajectory_setpoint", 10)
 
         # subscriptions
         self.rc_input_subscriber_ = self.create_subscription(
@@ -50,7 +51,7 @@ class OffboardControl(Node):
                                     self.tilt_angle_callback,
                                     qos_profile_sensor_data)
         self.tilt_angle_subscriber_       # tilt angle
-         
+
         # timer callback
         self.Ts = 0.01
         self.timer_ = self.create_timer(self.Ts, self.timer_callback)
@@ -85,7 +86,8 @@ class OffboardControl(Node):
         if (self.offboard_flag):
             # publish offboard mode heartbeat
             if not self.mpc_flag:
-                self.publish_offboard_control_mode_position()  
+                self.publish_offboard_control_mode_position()
+                self.publish_trajectory_setpoint()  
             else:
                 self.publish_offboard_control_mode_direct_actuator()
 
