@@ -9,8 +9,6 @@ from px4_msgs.msg import VehicleCommand
 from px4_msgs.msg import OffboardControlMode
 from px4_msgs.msg import VehicleOdometry
 from px4_msgs.msg import ActuatorMotors
-from px4_msgs.msg import VehicleTorqueSetpoint
-from px4_msgs.msg import VehicleThrustSetpoint
 from px4_msgs.msg import TiltAngle
 from px4_msgs.msg import TiltVel
 from px4_msgs.msg import InputRc
@@ -23,8 +21,6 @@ import time
 # Morphing lander MPC
 from morphing_lander.morphing_lander_mpc import *
 
-START_POSITION = [0.0, 0.0, -2.5] 
-
 class OffboardControl(Node):
     def __init__(self):
         super().__init__('OffboardControl')
@@ -33,8 +29,6 @@ class OffboardControl(Node):
         self.vehicle_command_publisher_       = self.create_publisher(VehicleCommand, "/fmu/in/vehicle_command", 10)
         self.offboard_control_mode_publisher_ = self.create_publisher(OffboardControlMode, "/fmu/in/offboard_control_mode", 10)
         self.actuator_motors_publisher_       = self.create_publisher(ActuatorMotors, "/fmu/in/actuator_motors", 10)
-        self.thrust_publisher_                = self.create_publisher(VehicleThrustSetpoint, "/fmu/in/vehicle_thrust_setpoint", 10)
-        self.torque_publisher_                = self.create_publisher(VehicleTorqueSetpoint, "/fmu/in/vehicle_torque_setpoint", 10)
         self.tilt_vel_publisher_              = self.create_publisher(TiltVel, "/tilt_vel", 10)
 
         # subscriptions
@@ -70,16 +64,10 @@ class OffboardControl(Node):
         self.mpc_flag = False 
 
         # robot state
-        self.state = np.zeros(12)
-        self.q = np.zeros(6)
-        self.u = np.zeros(4)
-        self.tau = np.zeros(4) # inputs without tilt angle
+        self.state = np.zeros(13)
 
         # tilt angle
         self.tilt_angle = 0.0
-        self.init_time = False
-        self.dt = 0.0
-        self.previous_time = 0.0
 
         # acados solver
         self.ocp = create_ocp_solver_description()
@@ -146,8 +134,6 @@ class OffboardControl(Node):
         o = msg.angular_velocity
 
         self.state = np.array([p[0],p[1],p[2],psi,th,phi,v[0],v[1],v[2],o[0],o[1],o[2],self.tilt_angle])
-        self.q = np.array([p[0],p[1],p[2],psi,th,phi])
-        self.u = np.array([v[0],v[1],v[2],o[0],o[1],o[2]])
 
         print(f"phi,th,psi: {phi:.2f},{th:.2f},{psi:.2f}".format())
         print(f"x,y,z: {p[0]:.2f},{p[1]:.2f},{p[2]:.2f}".format())
@@ -179,12 +165,6 @@ class OffboardControl(Node):
         # Publish actuator motors commanded by MPC controller
         self.publish_actuator_motors(u_opt[:-1])
         self.publish_tilt_vel(u_opt[4]) # this value is already normalized between -1 and 1 
-
-        print(f"dt: {self.dt/1.0e6}")
-
-        # publish torque and thrust setpoint for the state estimator
-        wrench = S_numeric(self.q,self.tilt_angle).T @ u_opt[:-1]
-        self.publish_thrust_torque(np.array([0,0,wrench[2]/T_max]),np.array([wrench[3]/tau_max_x,wrench[4]/tau_max_y,wrench[5]/tau_max_z]))
 
         print("* comp time = %5g seconds\n" % (time.process_time() - start_time))
 
@@ -234,24 +214,6 @@ class OffboardControl(Node):
         timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         msg.timestamp = timestamp
         self.actuator_motors_publisher_.publish(msg)
-
-    def publish_thrust_torque(self,thrust,torque):
-        msg_thrust = VehicleThrustSetpoint()
-        msg_torque = VehicleTorqueSetpoint()
-
-        msg_thrust.xyz[0] = thrust[0]
-        msg_thrust.xyz[1] = thrust[1]
-        msg_thrust.xyz[2] = thrust[2]
-
-        msg_torque.xyz[0] = torque[0]
-        msg_torque.xyz[1] = torque[1]
-        msg_torque.xyz[2] = torque[2]
-
-        timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
-        msg_thrust.timestamp = timestamp
-        msg_torque.timestamp = timestamp 
-        self.thrust_publisher_.publish(msg_thrust)
-        self.torque_publisher_.publish(msg_torque)
 
     def publish_trajectory_setpoint(self):
         msg = TrajectorySetpoint()

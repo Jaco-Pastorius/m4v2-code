@@ -46,7 +46,7 @@ class OffboardControl(Node):
         self.offboard_setpoint_counter_ = 0
 
         # robot state
-        self.state = np.zeros(12)
+        self.state = np.zeros(13)
         self.q = np.zeros(6)
         self.u = np.zeros(4)
         self.tau = np.zeros(4) # inputs without tilt angle

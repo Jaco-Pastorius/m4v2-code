@@ -1,16 +1,25 @@
-
 # Acados/Casadi
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosModel
 from casadi import SX, vertcat, sin, cos, inv, Function
 import scipy.linalg
 import numpy as np
 
-# reference states
-X0 = np.array([0,0,-2.5,0,0,0,0,0,0,0,0,0,0])                 # initial states (gets overwritten)
-X_ref = np.array([0,0,0.10,0.0,0.0,0,0,0,0,0,0,0,np.pi/2])    # reference states
-U_ref = np.array([0.0,0.0,0.0,0.0,0.0])                       # reference inputs
+# initial state
+START_POSITION = [0.0, 0.0, -2.5] 
+X0 = np.array([START_POSITION[0],START_POSITION[1],START_POSITION[2],0,0,0,0,0,0,0,0,0,0]) 
 
-# cost function
+# reference states and inputs
+x_ref,y_ref,z_ref = 0,0,0.1
+psi_ref,theta_ref,phi_ref = 0,0,0
+dx_ref,dy_ref,dz_ref = 0,0,0
+ox_ref,oy_ref,oz_ref = 0,0,0
+varphi_ref = np.pi/2
+u_ref,v_ref = 0,0
+
+X_ref = np.array([x_ref,y_ref,z_ref,psi_ref,theta_ref,phi_ref,dx_ref,dy_ref,dz_ref,ox_ref,oy_ref,oz_ref,varphi_ref]) 
+U_ref = np.array([u_ref,u_ref,u_ref,u_ref,v_ref])               
+
+# cost function parameters
 w_x,w_y,w_z = 0,0,1
 w_dx,w_dy,w_dz = 1,1,1
 w_phi,w_th,w_psi = 1,1,0
@@ -18,14 +27,18 @@ w_ox,w_oy,w_oz = 7,7,1
 w_varphi = 1
 w_u, w_v = 1,1
 
+rho = 1e-2
+
 Q_mat = np.diag([w_x,w_y,w_z,w_psi,w_th,w_phi,w_dx,w_dy,w_dz,w_ox,w_oy,w_oz,w_varphi])
-R_mat = 1e-2 * np.diag([w_u,w_u,w_u,w_u,w_v])
+R_mat = rho * np.diag([w_u,w_u,w_u,w_u,w_v])
 
 # constraint variables
-u_max  = 1.0         # Max allowable input
-varphi_max = np.pi / 4
+u_max = 1.0 
 v_max = 1.0
-v_max_absolute = varphi_max / 2
+varphi_max = np.pi / 3  # limit max tilting angle to 60 degrees (not necessary but safer for first try)
+
+# maximum tilt velocity
+v_max_absolute = (np.pi/2) / 4
 
 # collocation parameters
 N_horizon = 10   # Define the number of discretization steps
