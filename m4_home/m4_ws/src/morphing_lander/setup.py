@@ -26,6 +26,7 @@ setup(
             'mpc_controller = morphing_lander.mpc_controller:main',
             'mpc_controller_sim = morphing_lander.mpc_controller_sim:main',
             'load_cell_test = morphing_lander.load_cell_test:main',
+            'keyboard_publisher = morphing_lander.keyboard_publisher:main',
             'relay_mocap = morphing_lander.relay_mocap:main'
         ],
     },
