@@ -36,6 +36,9 @@ class MPCHardware(MPCBase):
         self.max  = max
         self.dead = dead
 
+        self.offboard_switch = False
+        self.mpc_switch      = False
+
     def mpc_trigger(self):
         self.mpc_flag = copy(self.mpc_switch)
         
