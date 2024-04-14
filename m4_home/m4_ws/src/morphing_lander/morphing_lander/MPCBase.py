@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from numpy import zeros,array,copy,hstack,sum,absolute
 
 # Python imports
+import os 
 import time 
 
 # ROS imports
@@ -86,10 +87,14 @@ class MPCBase(Node,ABC):
         # counter
         self.counter = 0
 
-        # acados solver
-        self.ocp = create_ocp_solver_description()
+        # change to current directory
+        acados_models_path = os.getenv("HOME") +'/m4v2-code/m4_home/m4_ws/src/morphing_lander/morphing_lander/acados_models/'
+
+        # compile acados solver
+        ocp = create_ocp_solver_description()
         self.acados_ocp_solver = AcadosOcpSolver(
-            self.ocp, json_file="acados_ocp_" + self.ocp.model.name + ".json"
+            ocp, 
+            json_file=os.path.join(acados_models_path, ocp.model.name + '_acados_ocp.json')
         )
 
         # solver initialization

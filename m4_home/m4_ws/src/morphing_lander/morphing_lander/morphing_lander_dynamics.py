@@ -219,7 +219,7 @@ def B(x,u,varphi):
     return np.array(func(x,u))
 
 def export_robot_model() -> AcadosModel:
-    model_name = "torque_dynamics"
+    model_name = "morphing_lander"
 
     # tilt angle
     varphi = SX.sym("varphi",1)
