@@ -10,9 +10,9 @@ from px4_msgs.msg import OffboardControlMode
 from px4_msgs.msg import VehicleOdometry
 from px4_msgs.msg import ActuatorMotors
 from px4_msgs.msg import TiltAngle
-from px4_msgs.msg import TiltVel
 from px4_msgs.msg import InputRc
 from px4_msgs.msg import TrajectorySetpoint
+from custom_msgs.msg import TiltVel
 
 # Python imports
 import numpy as np
@@ -63,6 +63,11 @@ class OffboardControl(Node):
 
         # mpc flag
         self.mpc_flag = False 
+
+        # Configure RC inputs
+        self.min = 1094 
+        self.max = 1934 
+        self.dead = 1514 
 
         # robot state
         self.state = np.zeros(13)

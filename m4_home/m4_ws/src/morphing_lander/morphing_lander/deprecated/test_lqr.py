@@ -140,9 +140,6 @@ def closed_loop_simulation():
 
     # create solvers
     ocp = create_ocp_solver_description()
-    acados_ocp_solver = AcadosOcpSolver(
-        ocp, json_file="acados_ocp_" + ocp.model.name + ".json"
-    )
     acados_integrator = AcadosSimSolver(
         ocp, json_file="acados_ocp_" + ocp.model.name + ".json"
     )
@@ -157,59 +154,21 @@ def closed_loop_simulation():
     xcurrent = X0
     simX[0, :] = xcurrent
 
-    # initialize solver
-    for stage in range(N_horizon + 1):
-        acados_ocp_solver.set(stage, "x", X_ref)
-    for stage in range(N_horizon):
-        acados_ocp_solver.set(stage, "u", U_ref)
+    # initialize current imput
+    ucurrent = np.zeros(nu)
 
     # closed loop
     for i in range(Nsim):
 
-        start_time = time.process_time()
-        # set initial state constraint
-        acados_ocp_solver.set(0, "lbx", xcurrent)
-        acados_ocp_solver.set(0, "ubx", xcurrent)
+        # get current control
+        simU[i, :] = control(xcurrent,ucurrent)
 
-        # update yref
-        for j in range(N_horizon):
-            yref = np.hstack((X_ref,U_ref))
-            acados_ocp_solver.set(j, "yref", yref)
-            # acados_ocp_solver.set(j, "p", varphi)   # set parameter
-        yref_N = X_ref
-        acados_ocp_solver.set(N_horizon, "yref", yref_N)
-
-        # solve ocp
-        status = acados_ocp_solver.solve()
-        print("* comp time = %5g seconds\n" % (time.process_time() - start_time))
-
-        if status not in [0, 2]:
-            acados_ocp_solver.print_statistics()
-            plot_robot(
-                np.linspace(0, T_horizon / N_horizon * i, i + 1),
-                [None,None,None,None,None],
-                simU[:i, :],
-                simX[: i + 1, :],
-            )
-            raise Exception(
-                f"acados acados_ocp_solver returned status {status} in closed loop instance {i} with {xcurrent}"
-            )
-
-        if status == 2:
-            print(
-                f"acados acados_ocp_solver returned status {status} in closed loop instance {i} with {xcurrent}"
-            )
-        simU[i, :] = acados_ocp_solver.get(0, "u")
+        # update current control input
+        ucurrent = simU[i,:]
 
         # simulate system
         acados_integrator.set("x", xcurrent)
         acados_integrator.set("u", simU[i, :])
-
-        status = acados_integrator.solve()
-        if status != 0:
-            raise Exception(
-                f"acados integrator returned status {status} in closed loop instance {i}"
-            )
 
         # update state
         xcurrent = acados_integrator.get("x")
@@ -217,7 +176,7 @@ def closed_loop_simulation():
 
     # plot results
     plot_robot(
-        np.linspace(0, T_horizon / N_horizon * Nsim, Nsim + 1), [None, None, None, None, None], simU, simX,latexify=True,plt_show=False
+        np.linspace(0, T_horizon / N_horizon * Nsim, Nsim + 1), [None, None, None, None, None], simU, simX,latexify=True,plt_show=True
     )
 
 if __name__ == "__main__":

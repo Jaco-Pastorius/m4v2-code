@@ -22,8 +22,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'tilt_velocity_controller = morphing_lander.tilt_velocity_controller:main',
-            'mpc_controller = morphing_lander.mpc_controller:main',
+            'tilt_controller_hardware = morphing_lander.tilt_controller_hardware:main',
+            'tilt_controller_sim = morphing_lander.tilt_controller_sim:main',
+            'mpc_controller_hardware = morphing_lander.mpc_controller_hardware:main',
             'mpc_controller_sim = morphing_lander.mpc_controller_sim:main',
             'load_cell_test = morphing_lander.load_cell_test:main',
             'keyboard_publisher = morphing_lander.keyboard_publisher:main',

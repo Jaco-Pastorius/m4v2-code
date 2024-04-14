@@ -4,22 +4,20 @@ from launch.actions import ExecuteProcess
 
 def generate_launch_description():
     return LaunchDescription([
-        # Node(
-        #     package='morphing_lander',
-        #     executable='descent_controller',
-        #     name='descent_controller',
-        #     output='screen',    
-        # ),
-    
         Node(
             package='morphing_lander',
-            executable='altitude_controller',
-            name='altitude_controller',
+            executable='mpc_controller_sim',
+            name='mpc_controller_sim',
             output='screen',    
+        ),
+        Node(
+            package='morphing_lander',
+            executable='tilt_controller_sim',
+            name='tilt_controller_sim',
+            output='log',    
         ),        
         ExecuteProcess(
-            cmd=['ros2', 'bag', 'record', '-a'],
+            cmd=['ros2', 'bag', 'record', '/mpc_status'],
             output='screen'
         )
-
     ])
