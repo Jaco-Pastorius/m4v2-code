@@ -22,7 +22,7 @@ class TiltHardware(TiltControllerBase):
         super().__init__()
 
         # Subscriptions
-        self.subscriptions = self.create_subscription(
+        self.rc_subscription = self.create_subscription(
             InputRc,
             '/fmu/out/input_rc',
             self.rc_listener_callback,
