@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 
 # Numpy imports
-from numpy import zeros,array,copy,hstack,sum
+from numpy import zeros,array,copy,hstack,sum,absolute
 
 # Python imports
 import time 
@@ -36,7 +36,6 @@ N_horizon                  = params_.get('N_horizon')
 Ts                         = params_.get('Ts')
 u_max                      = params_.get('u_max')
 land_height                = params_.get('land_height')
-emergency_descent_velocity = params_.get('emergency_descent_velocity')
 max_tilt_in_flight         = params_.get('max_tilt_in_flight')
 max_tilt_on_land           = params_.get('max_tilt_on_land')
 
@@ -71,11 +70,6 @@ class MPCBase(Node,ABC):
 
         # mpc flag
         self.mpc_status = 0
-
-        # emergency descent
-        self.set_emergency_xyz_trajectory = False 
-        self.emergency_xyz_position = zeros(3,dtype='float')
-        self.emergency_t0 = 0.0
 
         # robot state
         self.state = zeros(12)
@@ -177,7 +171,6 @@ class MPCBase(Node,ABC):
             print(f"tilt_angle : {self.tilt_angle}")
             print(f"tilt_vel : {tilt_vel}")
 
-
             # publish thrust for landing estimator
             self.publish_vehicle_thrust_setpoint(-sum(u_opt)/4)
 
@@ -215,7 +208,7 @@ class MPCBase(Node,ABC):
     
     def ground_detector(self,x_current):
         grounded_flag = False
-        if x_current[2]>land_height:
+        if absolute(x_current[2])<absolute(land_height):
             grounded_flag = True
         return grounded_flag
 
@@ -268,9 +261,6 @@ class MPCBase(Node,ABC):
     # subscription callbacks
     def tilt_angle_callback(self, msg):
         self.tilt_angle = msg.value
-
-    def vehicle_land_detected_callback(self,msg):
-        grounded_flag = msg.landed
 
     # publisher methods
     def arm(self):
@@ -353,6 +343,14 @@ class MPCBase(Node,ABC):
     @abstractmethod
     def publish_actuator_motors(self):
         pass
+
+
+    # # emergency descent
+    # self.set_emergency_xyz_trajectory = False 
+    # self.emergency_xyz_position = zeros(3,dtype='float')
+    # self.emergency_t0 = 0.0
+
+    # emergency_descent_velocity = params_.get('emergency_descent_velocity')
 
     # if tracking_done and (not grounded_flag):
     #     print("tracking done but not grounded")

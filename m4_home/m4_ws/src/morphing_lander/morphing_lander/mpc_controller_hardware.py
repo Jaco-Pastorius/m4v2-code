@@ -16,9 +16,6 @@ from morphing_lander.MPCBase    import MPCBase
 from morphing_lander.parameters import params_
 from morphing_lander.utils      import euler_from_quaternion
 
-warmup_time  = params_['warmup_time']
-Ts           = params_['Ts']
-queue_size   = params_.get('queue_size')
 min          = params_.get('min')
 max          = params_.get('max')
 dead         = params_.get('dead')
