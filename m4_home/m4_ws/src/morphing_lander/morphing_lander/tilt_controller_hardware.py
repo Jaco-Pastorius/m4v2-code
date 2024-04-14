@@ -125,17 +125,13 @@ class TiltVelController(TiltControllerBase):
             self.spin_motor(self.tilt_vel)
 
 def main(args=None):
-    try:
-        rclpy.init(args=args)
-        tilt_controller = TiltVelController()
-        tilt_controller.get_logger().info("Starting TiltVelController node...")
-        rclpy.spin(tilt_controller)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        tilt_controller.on_shutdown()  # do any custom cleanup
-        tilt_controller.destroy_node()
-        rclpy.shutdown()
+    rclpy.init(args=args)
+    tilt_controller = TiltVelController()
+    tilt_controller.get_logger().info("Starting TiltVelController node...")
+    rclpy.spin(tilt_controller)
+    tilt_controller.on_shutdown()  # do any custom cleanup
+    tilt_controller.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
