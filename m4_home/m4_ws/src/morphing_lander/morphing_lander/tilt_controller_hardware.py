@@ -17,7 +17,7 @@ min  = params_['min']
 max  = params_['max']
 dead = params_['dead']
 
-class TiltVelController(TiltControllerBase):
+class TiltHardware(TiltControllerBase):
     def __init__(self):
         super().__init__()
 
@@ -126,8 +126,8 @@ class TiltVelController(TiltControllerBase):
 
 def main(args=None):
     rclpy.init(args=args)
-    tilt_controller = TiltVelController()
-    tilt_controller.get_logger().info("Starting TiltVelController node...")
+    tilt_controller = TiltHardware()
+    tilt_controller.get_logger().info("Starting TiltHardware node...")
     rclpy.spin(tilt_controller)
     tilt_controller.on_shutdown()  # do any custom cleanup
     tilt_controller.destroy_node()
