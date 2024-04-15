@@ -29,6 +29,9 @@ def traj_jump_time(t):
 
     done = False
 
+    z0 = -0.265
+    zf = -0.35
+
     H = -1.5
     v_up = -0.5
     v_down = 0.30
@@ -41,17 +44,17 @@ def traj_jump_time(t):
 
     if (t<t1): 
         x, dx    = v_forward*t, v_forward
-        z, dz    = v_up*t, v_up
+        z, dz    = z0 + v_up*t, v_up
         phi,dphi = 0.0,0.0
         tilt_vel = 0.0
     elif ((t>t1) and (t<t2)):
         x, dx    = v_forward*t, v_forward
-        z,dz = H + v_down * (t-t1), v_down
+        z,dz = z0 + H + v_down * (t-t1), v_down
         phi,dphi = phi_max*(t-t1)/(t2-t1), phi_max/(t2-t1)
         tilt_vel = 1.0
     elif (t>t2):
         x,dx = v_forward*t2,0.0
-        z,dz = 0.0,0.0
+        z,dz = zf,0.0
         phi,dphi = phi_max,phi_max/(t2-t1)
         tilt_vel = 1.0
         done = True
