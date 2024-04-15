@@ -2,11 +2,11 @@
 from abc import ABC, abstractmethod
 
 # Numpy imports
-from numpy import zeros,array,copy,hstack,sum,absolute
+from numpy import zeros,array,copy,hstack,sum,absolute,rad2deg
 
 # Python imports
 import os 
-import time 
+import time
 
 # ROS imports
 from rclpy.node  import Node
@@ -124,9 +124,10 @@ class MPCBase(Node,ABC):
         
         # switch to offboard mode
         if (not self.offboard) and offboard_flag: 
-            self.switch_to_offboard()
+            self.switch_to_offboard() # sets self.offboard flag
         
-        if self.offboard:
+        # if statement guarantees that offboard mode is exited when offboard switch is pushed other way
+        if self.offboard and offboard_flag:
             # keep offboard mode alive by publishing heartbeat
             self.publish_offboard_control_mode_direct_actuator() 
 
@@ -338,8 +339,8 @@ class MPCBase(Node,ABC):
         msg.omegay = x[10]
         msg.omegaz = x[11]
 
-        msg.varphi  = tilt_angle
-        msg.tiltvel = tilt_vel
+        msg.varphi  = rad2deg(tilt_angle)
+        msg.tiltvel = rad2deg(tilt_vel)
 
         msg.xref = x_ref.astype('float32')
         msg.uref = u_ref.astype('float32')

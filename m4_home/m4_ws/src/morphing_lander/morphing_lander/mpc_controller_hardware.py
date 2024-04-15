@@ -1,5 +1,5 @@
 # Numpy imports
-from numpy import array, copy
+from numpy import array
 
 # ROS imports
 import rclpy
