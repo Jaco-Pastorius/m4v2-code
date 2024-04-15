@@ -7,7 +7,7 @@ from rclpy.clock import Clock
 from rclpy.qos import qos_profile_sensor_data
 
 # Message imports
-from px4_msgs.msg import VehicleCommand
+from px4_msgs.msg import InputRc
 from px4_msgs.msg import VehicleOdometry
 from px4_msgs.msg import ActuatorMotors
 
@@ -25,12 +25,18 @@ class MPCHardware(MPCBase):
         super().__init__()
 
         # subscribers
+        self.rc_subscription = self.create_subscription(
+                                    InputRc,
+                                    '/fmu/out/input_rc',
+                                    self.rc_listener_callback,
+                                    qos_profile_sensor_data)
+        self.rc_subscription         
         self.vehicle_odometry_subscriber = self.create_subscription(
                                             VehicleOdometry,
                                             '/fmu/out/vehicle_odometry',
                                             self.vehicle_odometry_callback,
                                             qos_profile_sensor_data)
-        self.vehicle_odometry_subscriber  # prevent unused variable warning
+        self.vehicle_odometry_subscriber  
 
         self.min  = min
         self.max  = max
@@ -40,10 +46,10 @@ class MPCHardware(MPCBase):
         self.mpc_switch      = False
 
     def mpc_trigger(self):
-        self.mpc_flag = copy(self.mpc_switch)
+        return self.mpc_switch
         
     def offboard_mode_trigger(self):
-        self.offboard = copy(self.offboard_switch)
+        return self.offboard_switch
 
     def vehicle_odometry_callback(self, msg): 
         # get state from odometry
