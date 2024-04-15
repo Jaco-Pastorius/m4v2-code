@@ -94,7 +94,9 @@ class MPCBase(Node,ABC):
         ocp = create_ocp_solver_description()
         self.acados_ocp_solver = AcadosOcpSolver(
             ocp, 
-            json_file=os.path.join(acados_models_path, ocp.model.name + '_acados_ocp.json')
+            json_file=os.path.join(acados_models_path, ocp.model.name + '_acados_ocp.json'),
+            generate=False,
+            build   =False
         )
 
         # solver initialization
