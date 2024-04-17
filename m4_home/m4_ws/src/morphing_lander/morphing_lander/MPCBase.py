@@ -183,7 +183,7 @@ class MPCBase(Node,ABC):
             self.publish_vehicle_thrust_setpoint(-sum(u_opt)/4)
 
             # publish log values
-            self.publish_log(x_current,u_opt,x_ref,u_ref,self.tilt_angle,tilt_vel,self.mpc_status,comp_time)
+            self.publish_log(x_current,u_opt,x_ref,u_ref,self.tilt_angle,tilt_vel,self.mpc_status,comp_time,tracking_done,grounded_flag)
 
     # timer methods
     def mpc_update(self,xcurrent,phicurrent,x_ref,u_ref):
@@ -320,7 +320,7 @@ class MPCBase(Node,ABC):
         msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
         self.vehicle_command_publisher_.publish(msg)
 
-    def publish_log(self,x,u,x_ref,u_ref,tilt_angle,tilt_vel,status,comptime):
+    def publish_log(self,x,u,x_ref,u_ref,tilt_angle,tilt_vel,status,comptime,tracking_done,grounded_flag):
         msg = MPCStatus()
         msg.status = status
         msg.comptime = comptime
@@ -344,6 +344,9 @@ class MPCBase(Node,ABC):
 
         msg.xref = x_ref.astype('float32')
         msg.uref = u_ref.astype('float32')
+
+        msg.trackingdone = tracking_done
+        msg.grounded    = grounded_flag
 
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         self.mpc_status_publisher_.publish(msg)

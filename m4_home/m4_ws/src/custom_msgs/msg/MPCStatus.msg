@@ -24,3 +24,6 @@ float32 omegaz
 
 float32 varphi
 float32 tiltvel
+
+int32 trackingdone
+int32 grounded
