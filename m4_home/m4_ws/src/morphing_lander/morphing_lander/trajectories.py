@@ -36,8 +36,8 @@ def traj_jump_time(t):
 
     H = -1.0          # 1.5 m 
     v_up = -0.5
-    v_down = 0.30     # try 0.50 m/s
-    v_forward = 1.0   # 0.0
+    v_down = 0.50     # try 0.50 m/s
+    v_forward = 0.0   # 0.0
 
     t1 = H/v_up
     t2 = t1 - H/v_down
