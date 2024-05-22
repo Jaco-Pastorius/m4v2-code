@@ -1,7 +1,0 @@
-[console_scripts]
-load_cell_test = morphing_lander.load_cell_test:main
-mpc_controller_hardware = morphing_lander.mpc_controller_hardware:main
-mpc_controller_sim = morphing_lander.mpc_controller_sim:main
-relay_mocap = morphing_lander.relay_mocap:main
-tilt_controller_hardware = morphing_lander.tilt_controller_hardware:main
-tilt_controller_sim = morphing_lander.tilt_controller_sim:main

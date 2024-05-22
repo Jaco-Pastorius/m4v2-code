@@ -1,8 +1,13 @@
-/m4_home/m4_ws/build
-/m4_home/m4_ws/install
-/m4_home/m4_ws/log
 **/rosbag2*
 **/c_generated_code
 **/*.json
 **/_l4c_generated
 **/__pycache__
+**/learned_models
+**/log
+**/build
+**/install
+**/acados_models
+**/acados_sims
+**/learned_models
+**/data

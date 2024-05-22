@@ -69,6 +69,8 @@ OBJ+= $(OCP_OBJ)
 
 EXTERNAL_DIR=
 EXTERNAL_LIB=
+EXTERNAL_DIR+= /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/l4c_models
+EXTERNAL_LIB+= l4casadi_f
 
 INCLUDE_PATH = /home/m4pc/src/acados/include
 LIB_PATH = /home/m4pc/src/acados/lib

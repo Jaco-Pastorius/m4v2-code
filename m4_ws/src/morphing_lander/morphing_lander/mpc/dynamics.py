@@ -282,6 +282,7 @@ def export_robot_model() -> AcadosModel:
     f_expl = dynamics(X,U,varphi)
     if use_residual_model:
         cond  = vertcat(X[2],X[3],X[4],X[5],X[6],X[7],X[8],U)
+        # cond  = vertcat(X[2],X[3],X[4],X[5],X[6],X[7],X[8],U,varphi)
         f_res = l4c_residual_model(cond)
         f_expl = f_expl + f_res
 

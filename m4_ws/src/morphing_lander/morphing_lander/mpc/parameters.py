@@ -29,31 +29,6 @@ def load_trained_cvae(model_path):
     model.eval()
     return model
 
-class MLPZero(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-        self.input_layer = torch.nn.Linear(11, 512)
-
-        hidden_layers = []
-        for i in range(2):
-            hidden_layers.append(torch.nn.Linear(512, 512))
-
-        self.hidden_layer = torch.nn.ModuleList(hidden_layers)
-        self.out_layer = torch.nn.Linear(512, 12)
-
-        # Model is not trained -- setting output to zero
-        with torch.no_grad():
-            self.out_layer.bias.fill_(0.)
-            self.out_layer.weight.fill_(0.)
-
-    def forward(self, x):
-        x = self.input_layer(x)
-        for layer in self.hidden_layer:
-            x = torch.tanh(layer(x))
-        x = self.out_layer(x)
-        return x
-
 # declare parameter dictionary
 params_ = {}
 
@@ -67,6 +42,13 @@ params_['warmup_time']        = 1.0                            # time after whic
 params_['acados_ocp_path'] = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_models/'
 params_['acados_sim_path'] = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_sims/'
 
+# l4casadi build path
+params_['device'] = 'cuda'
+params_['use_residual_model']  = True
+params_['l4c_build_path'] = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/l4c_models/'
+params_['learned_model_path'] = Path('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/learned_models/2024-05-21_23-08-03')
+params_['l4c_residual_model']  = L4CasADi(load_trained_cvae(params_.get('learned_model_path')), model_expects_batch_dim=True, device=params_.get('device'), build_dir=params_.get('l4c_build_path'))
+
 # gazebo real time factor
 params_['real_time_factor'] = 1.0
 
@@ -74,14 +56,6 @@ params_['real_time_factor'] = 1.0
 params_['max_dx'] = 0.5
 params_['max_dy'] = 0.5
 params_['max_dz'] = 0.5
-
-# learned model path
-params_['use_residual_model']  = False
-# learned_model = CVAE(output_dim=12,latent_dim=8,cond_dim=11,encoder_layers=[32,32],decoder_layers=[32,32],prior_layers=[32,32])
-learned_model = load_trained_cvae(Path('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/learned_models/2024-05-21_16-56-45'))
-# learned_model = MLPZero()
-l4c_residual_model = L4CasADi(learned_model, model_expects_batch_dim=True, device='cpu')  # device='cuda' for GPU
-params_['l4c_residual_model']  = l4c_residual_model
 
 # rc inputs
 params_['min']  = 1094

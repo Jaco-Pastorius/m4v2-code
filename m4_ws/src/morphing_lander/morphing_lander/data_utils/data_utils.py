@@ -61,19 +61,21 @@ def get_data_from_rosbag(bag_path,type_path,topic_name):
     data['dt_vec'] = dt_vec
     return data
 
-def train_val_split(data,percent_val,state_idx,input_idx):
+def train_val_split(data,percent_val,state_idx,input_idx,include_phi=False):
     N = data['x_vec'].shape[0]
     N_val = int(N*percent_val)
     target_tensor = torch.tensor(data['f_res'])
     # target_tensor = torch.tensor(data['d'])
     x_vec_tensor   = torch.tensor(data['x_vec'][:-1,state_idx])
     u_vec_tensor   = torch.tensor(data['u_vec'][:-1,input_idx])
-    phi_vec_tensor = torch.tensor(data['phi_vec'])[:-1].unsqueeze(-1)
-    train_data = torch.cat((target_tensor[:-N_val,:],x_vec_tensor[:-N_val,:],u_vec_tensor[:-N_val,:],phi_vec_tensor[:-N_val,:]),dim=1)
-    val_data   = torch.cat((target_tensor[-N_val:,:],x_vec_tensor[-N_val:,:],u_vec_tensor[-N_val:,:],phi_vec_tensor[-N_val:,:]),dim=1)
-    train_data = train_data.float()
-    val_data   = val_data.float()
-    return train_data, val_data
+    if include_phi:
+        phi_vec_tensor = torch.tensor(data['phi_vec'])[:-1].unsqueeze(-1)
+        train_data = torch.cat((target_tensor[:-N_val,:],x_vec_tensor[:-N_val,:],u_vec_tensor[:-N_val,:],phi_vec_tensor[:-N_val,:]),dim=1)
+        val_data   = torch.cat((target_tensor[-N_val:,:],x_vec_tensor[-N_val:,:],u_vec_tensor[-N_val:,:],phi_vec_tensor[-N_val:,:]),dim=1)
+    else:
+        train_data = torch.cat((target_tensor[:-N_val,:],x_vec_tensor[:-N_val,:],u_vec_tensor[:-N_val,:]),dim=1)
+        val_data   = torch.cat((target_tensor[-N_val:,:],x_vec_tensor[-N_val:,:],u_vec_tensor[-N_val:,:]),dim=1)    
+    return train_data.float(), val_data.float()
 
 def plot_data(data):
     f_res = data['f_res']

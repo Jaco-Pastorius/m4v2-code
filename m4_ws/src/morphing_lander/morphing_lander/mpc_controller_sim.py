@@ -85,10 +85,10 @@ class MPCSim(MPCBase):
         x_ref[7] = self.input[1]
         x_ref[8] = self.input[2]
 
-        if self.input[2] > 0.0 and self.state[2] > -1.0:
-            tilt_vel = 1.0
-        else:
-            tilt_vel = -1.0
+        # if self.input[2] > 0.0 and self.state[2] > -1.0:
+        #     tilt_vel = 1.0
+        # else:
+        #     tilt_vel = -1.0
 
         return x_ref, u_ref, tilt_vel
 

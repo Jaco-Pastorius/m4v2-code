@@ -156,9 +156,9 @@ class MPCBase(Node,ABC):
 
             # update reference (make sure reference starts from ground and ends on ground)
             x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(self.current_time)
+            tilt_vel = 0.0
 
-            print(f"XREF: {x_ref}")
-            # update reference based on joystick/RC commands
+            # # update reference based on joystick/RC commands
             # tracking_done = False
             # x_ref,u_ref,tilt_vel = self.get_reference()
 

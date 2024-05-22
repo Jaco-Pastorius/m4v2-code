@@ -27,6 +27,10 @@ varphi0 = 0.0
 # export directory
 acados_ocp_path = params_.get('acados_ocp_path')
 
+# l4casadi
+use_residual_model = params_.get('use_residual_model')
+l4c_residual_model = params_.get('l4c_residual_model')
+
 def create_ocp_solver_description() -> AcadosOcp:
     # create ocp object to formulate the OCP
     ocp = AcadosOcp()
@@ -82,5 +86,10 @@ def create_ocp_solver_description() -> AcadosOcp:
 
     # export directory
     ocp.code_export_directory = acados_ocp_path
+
+    # l4casadi
+    if use_residual_model:
+        ocp.solver_options.model_external_shared_lib_dir = l4c_residual_model.shared_lib_dir
+        ocp.solver_options.model_external_shared_lib_name = l4c_residual_model.name
 
     return ocp

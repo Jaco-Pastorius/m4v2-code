@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 import yaml
 from morphing_lander.cvae.data import MLDataset
+from IPython import embed
 
 @dataclass
 class TrainConfig:
