@@ -3,11 +3,10 @@
 **/*.json
 **/_l4c_generated
 **/__pycache__
-**/learned_models
 **/log
 **/build
 **/install
-**/acados_models
-**/acados_sims
-**/learned_models
-**/data
+# **/acados_models
+# **/acados_sims
+# **/learned_models
+# **/data
