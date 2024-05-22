@@ -6,7 +6,7 @@
 **/log
 **/build
 **/install
-# **/acados_models
-# **/acados_sims
-# **/learned_models
-# **/data
+**/acados_models
+**/acados_sims
+**/learned_models
+**/data
