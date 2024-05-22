@@ -1,0 +1,60 @@
+[0.859s] Invoking command in '/home/m4pc/m4v2-code/m4_ws/src/morphing_lander': PYTHONPATH=/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/prefix_override:/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/python3.8/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated setup.py egg_info --egg-base build/morphing_lander build --build-base /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build install --record /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/install.log --single-version-externally-managed install_data
+[1.104s] running egg_info
+[1.120s] writing build/morphing_lander/morphing_lander.egg-info/PKG-INFO
+[1.121s] writing dependency_links to build/morphing_lander/morphing_lander.egg-info/dependency_links.txt
+[1.122s] writing entry points to build/morphing_lander/morphing_lander.egg-info/entry_points.txt
+[1.122s] writing requirements to build/morphing_lander/morphing_lander.egg-info/requires.txt
+[1.122s] writing top-level names to build/morphing_lander/morphing_lander.egg-info/top_level.txt
+[1.404s] reading manifest file 'build/morphing_lander/morphing_lander.egg-info/SOURCES.txt'
+[1.406s] writing manifest file 'build/morphing_lander/morphing_lander.egg-info/SOURCES.txt'
+[1.406s] running build
+[1.406s] running build_py
+[1.406s] copying morphing_lander/tilt_controller_hardware.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander
+[1.407s] copying morphing_lander/relay_mocap.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander
+[1.407s] copying morphing_lander/__init__.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander
+[1.407s] copying morphing_lander/tilt_controller_sim.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander
+[1.407s] copying morphing_lander/mpc_controller_hardware.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander
+[1.407s] copying morphing_lander/load_cell_test.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander
+[1.408s] copying morphing_lander/mpc_controller_sim.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander
+[1.408s] copying morphing_lander/mpc/dynamics.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/mpc
+[1.408s] copying morphing_lander/mpc/MPCBase.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/mpc
+[1.409s] copying morphing_lander/mpc/integrator.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/mpc
+[1.409s] copying morphing_lander/mpc/mpc.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/mpc
+[1.409s] copying morphing_lander/mpc/roboclaw_3.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/mpc
+[1.409s] copying morphing_lander/mpc/parameters.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/mpc
+[1.409s] copying morphing_lander/mpc/__init__.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/mpc
+[1.410s] copying morphing_lander/mpc/trajectories.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/mpc
+[1.410s] copying morphing_lander/mpc/TiltControllerBase.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/mpc
+[1.410s] copying morphing_lander/mpc/learned_dynamics.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/mpc
+[1.410s] copying morphing_lander/mpc/utils.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/mpc
+[1.411s] copying morphing_lander/cvae/cvae_utils.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/cvae
+[1.411s] copying morphing_lander/cvae/__init__.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/cvae
+[1.411s] copying morphing_lander/cvae/models.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/cvae
+[1.411s] copying morphing_lander/cvae/models_test.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/cvae
+[1.411s] copying morphing_lander/cvae/train.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/cvae
+[1.412s] copying morphing_lander/cvae/data.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/cvae
+[1.412s] copying morphing_lander/data_utils/__init__.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/data_utils
+[1.412s] copying morphing_lander/data_utils/data_utils.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/data_utils
+[1.413s] running install
+[1.417s] running install_lib
+[1.434s] copying /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/mpc/MPCBase.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/python3.8/site-packages/morphing_lander/mpc
+[1.435s] copying /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build/lib/morphing_lander/data_utils/data_utils.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/python3.8/site-packages/morphing_lander/data_utils
+[1.435s] byte-compiling /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/python3.8/site-packages/morphing_lander/mpc/MPCBase.py to MPCBase.cpython-38.pyc
+[1.437s] byte-compiling /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/python3.8/site-packages/morphing_lander/data_utils/data_utils.py to data_utils.cpython-38.pyc
+[1.438s] running install_data
+[1.438s] copying resource/morphing_lander -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/share/ament_index/resource_index/packages
+[1.438s] copying package.xml -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/share/morphing_lander
+[1.438s] copying launch/sim.launch.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/share/morphing_lander
+[1.438s] copying launch/control.launch.py -> /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/share/morphing_lander
+[1.439s] running install_egg_info
+[1.455s] removing '/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/python3.8/site-packages/morphing_lander-0.0.0-py3.8.egg-info' (and everything under it)
+[1.455s] Copying build/morphing_lander/morphing_lander.egg-info to /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/python3.8/site-packages/morphing_lander-0.0.0-py3.8.egg-info
+[1.456s] running install_scripts
+[1.495s] Installing load_cell_test script to /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/morphing_lander
+[1.495s] Installing mpc_controller_hardware script to /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/morphing_lander
+[1.495s] Installing mpc_controller_sim script to /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/morphing_lander
+[1.495s] Installing relay_mocap script to /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/morphing_lander
+[1.496s] Installing tilt_controller_hardware script to /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/morphing_lander
+[1.496s] Installing tilt_controller_sim script to /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/morphing_lander
+[1.497s] writing list of installed files to '/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/install.log'
+[1.518s] Invoked command in '/home/m4pc/m4v2-code/m4_ws/src/morphing_lander' returned '0': PYTHONPATH=/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/prefix_override:/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/install/morphing_lander/lib/python3.8/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated setup.py egg_info --egg-base build/morphing_lander build --build-base /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/build install --record /home/m4pc/m4v2-code/m4_ws/src/morphing_lander/build/morphing_lander/install.log --single-version-externally-managed install_data
