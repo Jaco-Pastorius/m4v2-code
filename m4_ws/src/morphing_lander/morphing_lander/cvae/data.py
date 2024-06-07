@@ -1,18 +1,20 @@
 import torch
 from torch.utils.data import Dataset
 
-class MLDataset(Dataset):
-    def __init__(self, path: str):
+class ResidualDataset(Dataset):
+    def __init__(self, path: str,n_targets):
         """
-        Initialize the morphing lander dataset
+        Initialize the morphing lander residual dataset
 
         Args:
             path: str; path to the dataset.
         """
         # Load the data.
         self.data = torch.load(path)
-        self.d       = self.data[:, :12]
-        self.x       = self.data[:, 12:]
+
+        # get subset of states to be predicted
+        self.d       = self.data[:, :n_targets]
+        self.x       = self.data[:, n_targets:]
         self.cond    = self.x
 
         self.cond_mean = self.cond.mean(dim=0)

@@ -1,19 +1,21 @@
-from casadi import SX, vertcat, sin, cos, inv, Function, jacobian, MX
+from casadi import SX, vertcat, sin, cos, inv, Function, jacobian, MX, pi, fabs, if_else
 import numpy as np
 from acados_template import AcadosModel
+from morphing_lander.mpc.utils import theta_fit
 from morphing_lander.mpc.parameters import params_
-
-# for learned dynamics
-import torch, yaml, os
-from morphing_lander.cvae.models import CVAE
-from morphing_lander.cvae.train import TrainConfig
-import l4casadi as l4c
-
-from IPython import embed
 
 # check whether to use residual model
 use_residual_model  = params_['use_residual_model']
-l4c_residual_model = params_['l4c_residual_model']
+l4c_residual_model  = params_['l4c_residual_model']
+
+# get learning parameters
+model_states_in_idx  = params_.get('model_states_in_idx')
+model_inputs_in_idx  = params_.get('model_inputs_in_idx')
+model_phi_in         = params_.get('model_phi_in')
+model_dt_in          = params_.get('model_dt_in')
+model_states_out_idx = params_.get('model_states_out_idx')
+model_ninputs        = params_.get('model_ninputs')
+model_noutputs       = params_.get('model_noutputs')
 
 # get robot model parameters 
 gravity        = params_.get('g')                                 
@@ -22,6 +24,7 @@ kM             = params_.get('kM')
 m_base         = params_.get('m_base')
 m_arm          = params_.get('m_arm')
 m_rotor        = params_.get('m_rotor')
+m              = params_.get('m')
 I_base_xx      = params_.get('I_base_xx')
 I_base_yy      = params_.get('I_base_yy')
 I_base_zz      = params_.get('I_base_zz')
@@ -47,7 +50,8 @@ r_AR1_x        = params_.get('r_AR1_x')
 r_AR1_y        = params_.get('r_AR1_y')
 r_AR1_z        = params_.get('r_AR1_z')
 
-def M_(X,Phi):
+# individual terms of robot dynamics equation
+def M_func():
     x   = SX.sym('x',12)
     phi = SX.sym('phi',1)
 
@@ -75,10 +79,9 @@ def M_(X,Phi):
 [                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                -2*(cos(theta_Bx)*sin(theta_Bz) - cos(theta_Bz)*sin(theta_Bx)*sin(theta_By))*(m_arm*r_AG_right_x + m_arm*r_BA_right_x + 2*m_rotor*r_BA_right_x),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  2*(cos(theta_Bx)*cos(theta_Bz) + sin(theta_Bx)*sin(theta_By)*sin(theta_Bz))*(m_arm*r_AG_right_x + m_arm*r_BA_right_x + 2*m_rotor*r_BA_right_x),                                                                                                                                                                                                                                                                                                                         2*cos(theta_By)*sin(theta_Bx)*(m_arm*r_AG_right_x + m_arm*r_BA_right_x + 2*m_rotor*r_BA_right_x),                                                                                                                                                                                                                                                 I_base_xz - 2*m_arm*r_AG_right_x*r_BA_right_z - 2*m_arm*r_BA_right_x*r_BA_right_z - 4*m_rotor*r_BA_right_x*r_BA_right_z - 2*m_arm*r_AG_right_z*r_BA_right_x*cos(phi) - 4*m_rotor*r_AR1_z*r_BA_right_x*cos(phi) - 2*m_arm*r_AG_right_y*r_BA_right_x*sin(phi) - 4*m_rotor*r_AR1_y*r_BA_right_x*sin(phi),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       I_base_yz, 2*I_arm_yy + I_base_zz + 4*I_rotor_yy + 2*m_arm*r_BA_right_x**2 + 2*m_arm*r_BA_right_y**2 + 4*m_rotor*r_AR1_x**2 + 4*m_rotor*r_AR1_z**2 + 4*m_rotor*r_BA_right_x**2 + 4*m_rotor*r_BA_right_y**2 - 2*I_arm_yy*cos(phi)**2 + 2*I_arm_zz*cos(phi)**2 - 4*I_rotor_yy*cos(phi)**2 + 4*I_rotor_zz*cos(phi)**2 - 2*I_arm_yz*sin(2*phi) + 4*m_arm*r_AG_right_x*r_BA_right_x + 4*m_rotor*r_AR1_y**2*cos(phi)**2 - 4*m_rotor*r_AR1_z**2*cos(phi)**2 + 4*m_arm*r_AG_right_y*r_BA_right_y*cos(phi) + 8*m_rotor*r_AR1_y*r_BA_right_y*cos(phi) - 4*m_arm*r_AG_right_z*r_BA_right_y*sin(phi) - 8*m_rotor*r_AR1_z*r_BA_right_y*sin(phi) - 4*m_rotor*r_AR1_y*r_AR1_z*sin(2*phi)]        
         ])
     )
-    func = Function("M",[x,phi],[out])
-    return func(X,Phi)
+    return Function("M_func",[x,phi],[out])
 
-def b_(X,Phi):
+def b_func():
     x   = SX.sym('x',12)
     phi = SX.sym('phi',1)
     # get state variables
@@ -105,10 +108,9 @@ def b_(X,Phi):
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  I_base_xy*omega_Bx**2 - I_base_xy*omega_By**2 + 2*I_arm_xy*omega_Bx**2*cos(phi) - 2*I_arm_xy*omega_By**2*cos(phi) + 2*I_arm_xz*omega_Bx**2*sin(phi) - 2*I_arm_xz*omega_By**2*sin(phi) - 2*I_arm_xx*omega_Bx*omega_By + 2*I_arm_zz*omega_Bx*omega_By - I_base_xx*omega_Bx*omega_By + I_base_yy*omega_Bx*omega_By - I_base_xz*omega_By*omega_Bz + I_base_yz*omega_Bx*omega_Bz - 4*I_rotor_xx*omega_Bx*omega_By + 4*I_rotor_zz*omega_Bx*omega_By + 2*m_arm*omega_Bx*omega_By*r_BA_right_x**2 - 2*m_arm*omega_Bx*omega_By*r_BA_right_y**2 + 4*m_rotor*omega_Bx*omega_By*r_AR1_x**2 - 4*m_rotor*omega_Bx*omega_By*r_AR1_z**2 + 4*m_rotor*omega_Bx*omega_By*r_BA_right_x**2 - 4*m_rotor*omega_Bx*omega_By*r_BA_right_y**2 + 2*I_arm_yy*omega_Bx*omega_By*cos(phi)**2 - 2*I_arm_zz*omega_Bx*omega_By*cos(phi)**2 + 4*I_rotor_yy*omega_Bx*omega_By*cos(phi)**2 - 4*I_rotor_zz*omega_Bx*omega_By*cos(phi)**2 + 2*I_arm_yz*omega_Bx*omega_By*sin(2*phi) + 4*m_arm*omega_Bx*omega_By*r_AG_right_x*r_BA_right_x + 2*m_arm*omega_By*omega_Bz*r_AG_right_x*r_BA_right_z + 2*m_arm*omega_By*omega_Bz*r_BA_right_x*r_BA_right_z + 4*m_rotor*omega_By*omega_Bz*r_BA_right_x*r_BA_right_z - 4*m_rotor*omega_Bx*omega_By*r_AR1_y**2*cos(phi)**2 + 4*m_rotor*omega_Bx*omega_By*r_AR1_z**2*cos(phi)**2 - 4*m_arm*omega_Bx*omega_By*r_AG_right_y*r_BA_right_y*cos(phi) + 2*m_arm*omega_By*omega_Bz*r_AG_right_z*r_BA_right_x*cos(phi) - 8*m_rotor*omega_Bx*omega_By*r_AR1_y*r_BA_right_y*cos(phi) + 4*m_rotor*omega_By*omega_Bz*r_AR1_z*r_BA_right_x*cos(phi) + 4*m_arm*omega_Bx*omega_By*r_AG_right_z*r_BA_right_y*sin(phi) + 2*m_arm*omega_By*omega_Bz*r_AG_right_y*r_BA_right_x*sin(phi) + 8*m_rotor*omega_Bx*omega_By*r_AR1_z*r_BA_right_y*sin(phi) + 4*m_rotor*omega_By*omega_Bz*r_AR1_y*r_BA_right_x*sin(phi) + 4*m_rotor*omega_Bx*omega_By*r_AR1_y*r_AR1_z*sin(2*phi)        
         ])
     )
-    func = Function("b",[x,phi],[out])
-    return func(X,Phi)
+    return Function("b_func",[x,phi],[out])
 
-def g_(X,Phi):
+def g_func():
     x   = SX.sym('x',12)
     phi = SX.sym('phi',1)
     # get state variables
@@ -135,10 +137,9 @@ def g_(X,Phi):
                                                                                                                                                                                                                                                                                                                -2*gravity*cos(theta_By)*sin(theta_Bx)*(m_arm*r_AG_right_x + m_arm*r_BA_right_x + 2*m_rotor*r_BA_right_x)      
         ])
     )
-    func = Function("g",[x,phi],[out])
-    return func(X,Phi)
+    return Function("g",[x,phi],[out])
 
-def S_(X,Phi):
+def S_func():
     x   = SX.sym('x',12)
     phi = SX.sym('phi',1)
     # get state variables
@@ -163,10 +164,9 @@ def S_(X,Phi):
 [- kT*cos(phi)*(sin(theta_Bx)*sin(theta_Bz) + cos(theta_Bx)*cos(theta_Bz)*sin(theta_By)) - kT*sin(phi)*(cos(theta_Bx)*sin(theta_Bz) - cos(theta_Bz)*sin(theta_Bx)*sin(theta_By)), kT*cos(phi)*(cos(theta_Bz)*sin(theta_Bx) - cos(theta_Bx)*sin(theta_By)*sin(theta_Bz)) + kT*sin(phi)*(cos(theta_Bx)*cos(theta_Bz) + sin(theta_Bx)*sin(theta_By)*sin(theta_Bz)), -kT*cos(phi + theta_Bx)*cos(theta_By), -kT*(r_AR1_y + r_BA_right_y*cos(phi) + r_BA_right_z*sin(phi)), kT*(r_BA_right_x*cos(phi) - r_AR1_x*cos(phi) + kM*sin(phi)), -kT*(kM*cos(phi) + r_AR1_x*sin(phi) - r_BA_right_x*sin(phi))]        
         ])
     )
-    func = Function("S",[x,phi],[out])
-    return func(X,Phi)
+    return Function("S_func",[x,phi],[out])
 
-def F(Theta_Bx,Theta_By,Theta_Bz):
+def F_func():
     theta_Bx = SX.sym('theta_Bx',1)
     theta_By = SX.sym('theta_By',1)
     theta_Bz = SX.sym('theta_Bz',1)
@@ -178,10 +178,9 @@ def F(Theta_Bx,Theta_By,Theta_Bz):
         [1, (sin(theta_Bx)*sin(theta_By))/cos(theta_By), (cos(theta_Bx)*sin(theta_By))/cos(theta_By)]
     ])
     )
-    func = Function("F",[theta_Bx,theta_By,theta_Bz],[out])
-    return func(Theta_Bx,Theta_By,Theta_Bz)
+    return Function("F_func",[theta_Bx,theta_By,theta_Bz],[out])
 
-def G(Theta_Bx,Theta_By,Theta_Bz):
+def G_func():
     theta_Bx = SX.sym('theta_Bx',1)
     theta_By = SX.sym('theta_By',1)
     theta_Bz = SX.sym('theta_Bz',1)
@@ -193,10 +192,15 @@ def G(Theta_Bx,Theta_By,Theta_Bz):
             [cos(theta_Bx)*cos(theta_By), -sin(theta_Bx), 0]
         ])
     )
-    func = Function("G",[theta_Bx,theta_By,theta_Bz],[out])
-    return func(Theta_Bx,Theta_By,Theta_Bz)
+    return Function("G_func",[theta_Bx,theta_By,theta_Bz],[out])
 
-def dynamics(X,U,varphi):
+# full dynamics functions
+def dynamics_func():
+    # get symbolic variables
+    X      = MX.sym('X',12,1)
+    U      = MX.sym('U',4,1)
+    varphi = MX.sym('varphi',1,1)
+
     # get state variables
     x_B      = X[0]
     y_B      = X[1]
@@ -216,57 +220,217 @@ def dynamics(X,U,varphi):
     u = vertcat(dx_B,dy_B,dz_B,omega_Bx,omega_By,omega_Bz)
 
     # get dynamics matrices
-    M_x = M_(X,varphi)
-    b_x = b_(X,varphi)
-    g_x = g_(X,varphi)  
-    S_x = S_(X,varphi)
+    M_x = M_func()(X,varphi)
+    b_x = b_func()(X,varphi)
+    g_x = g_func()(X,varphi)  
+    S_x = S_func()(X,varphi)
 
     # compute inverse mass matrix
     Minv = inv(M_x)
     du = Minv @ (S_x.T @ U - b_x - g_x)
 
-    chid = F(theta_Bx,theta_By,theta_Bz) @ vertcat(omega_Bx,omega_By,omega_Bz)
+    chid = F_func()(theta_Bx,theta_By,theta_Bz) @ vertcat(omega_Bx,omega_By,omega_Bz)
 
     # finally write explicit dynamics
     f_expl = vertcat(u[0],u[1],u[2],chid,du)
+    
+    return Function('dynamics_func',[X,U,varphi],[f_expl])
 
-    return f_expl
+def dynamics_with_res_func():
+    # get symbolic variables
+    X      = MX.sym('X',12,1)
+    U      = MX.sym('U',4,1)
+    varphi = MX.sym('varphi',1,1)
 
-def f(x,u,varphi):
-    X = SX.sym("X",12)
-    U = SX.sym("U",4)    
-    Varphi = SX.sym("Varphi",1)
-    func = Function('f',[X,U,Varphi],[dynamics(X,U,Varphi)],['X','U','Varphi'],['f'])
-    return np.array(func(x,u,varphi))
+    # get nominal dynamics
+    f_expl = dynamics_func()(X,U,varphi)
+
+    # get residual function
+    residual_func = f_res()
+
+    # get symbolic parameters
+    params_sym = l4c_residual_model.get_sym_params()
+
+    # get conditioning variables
+    cond = MX([])
+    for state_idx in model_states_in_idx:
+        cond = vertcat(cond,X[state_idx])
+    for input_idx in model_inputs_in_idx:
+        cond = vertcat(cond,U[input_idx])
+    if model_phi_in:
+        cond = vertcat(cond,varphi)  
+
+    # add residual dynamics to nominal dynamics
+    f_residual = residual_func(cond.T,params_sym)
+    count = 0
+
+    for state_idx in model_states_out_idx:
+        f_expl[state_idx] += f_residual[count]
+        count += 1
+
+    return Function('dynamics_with_res_func',[X,U,varphi,params_sym],[f_expl])
+
+def dynamics_ground_effect_func():
+    # get symbolic variables
+    X      = MX.sym('X',12,1)
+    U      = MX.sym('U',4,1)
+    varphi = MX.sym('varphi',1,1)
+
+    # get nominal dynamics without ground effect
+    f_expl = dynamics_func()(X,U,varphi)
+
+    # add ground effect dynamics to z acceleration
+    z = X[2]
+    R = 0.1143
+    ground_effect = if_else(fabs(z)/R < 5,1 + (-1.0/5.0*fabs(z/R)+1.0),1.0)
+    f_expl[8] += -(ground_effect-1) * kT * (U[0] + U[1] + U[2] + U[3]) * cos(varphi) / m
+
+    return Function('dynamics_ground_effect_func',[X,U,varphi],[f_expl])
+
+def dynamics_phi_func():
+    # get symbolic variables
+    X_no_varphi      = MX.sym('X',12,1)
+    U_no_v           = MX.sym('U',4,1)
+    varphi           = MX.sym('varphi',1,1)
+
+    # get dynamics without phi dynamics
+    f_expl = dynamics_func()(X_no_varphi,U_no_v,varphi)
+ 
+    # get phi dynamics
+    coeff = 0.3905
+    theta = theta_fit(varphi)
+    v_max = 2*pi/60*(220 - 0.14*coeff*(U[0]+U[1]+U[2]+U[3])*kT/gravity*sin(theta))
+
+    # finally write explicit dynamics including phi
+    v = MX.sym('v',1,1)
+    f_expl = vertcat(f_expl,v_max*v)
+
+    # get augmented state and input variables
+    X = vertcat(X_no_varphi,varphi)
+    U = vertcat(U,v)
+
+    return Function('dynamics_phi_func',[X,U],[f_expl])
+
+# special functions
+def f():
+    X = MX.sym("X",12)
+    U = MX.sym("U",4)    
+    Varphi = MX.sym("Varphi",1)
+    return Function('f',[X,U,Varphi],[dynamics_func()(X,U,Varphi)])
+
+def f_res():
+    in_sym      = MX.sym('in_sym',params_.get('model_ninputs'),1)
+    y_sym       = l4c_residual_model(in_sym)
+    params_sym  = l4c_residual_model.get_sym_params()
+    return Function('f_res',[in_sym, params_sym],[y_sym])
+
+def f_ground_effect():
+    X = MX.sym("X",12)
+    U = MX.sym("U",4)    
+    Varphi = MX.sym("Varphi",1)
+    return Function('f',[X,U,Varphi],[dynamics_ground_effect_func()(X,U,Varphi)])
 
 def rk4():
-    DT = SX.sym("DT", 1)
-    X = SX.sym("X",12)
-    U = SX.sym("U",4)    
-    Varphi = SX.sym("Varphi",1)
+    DT = MX.sym("DT", 1)
+    X = MX.sym("X",12)
+    U = MX.sym("U",4)    
+    Varphi = MX.sym("Varphi",1)
 
     # Fixed step Runge-Kutta 4 integrator
-    k1 = dynamics(X, U, Varphi)
-    k2 = dynamics(X + DT / 2 * k1, U, Varphi)
-    k3 = dynamics(X + DT / 2 * k2, U, Varphi)
-    k4 = dynamics(X + DT * k3, U, Varphi)
+    k1 = dynamics_func()(X, U, Varphi)
+    k2 = dynamics_func()(X + DT / 2 * k1, U, Varphi)
+    k3 = dynamics_func()(X + DT / 2 * k2, U, Varphi)
+    k4 = dynamics_func()(X + DT * k3, U, Varphi)
     x_next = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
 
-    func = Function('rk4', [DT, X, U, Varphi], [x_next], ['DT', 'X', 'U', 'Varphi'], ['x_next'])
+    func = Function('rk4', [DT, X, U, Varphi], [x_next])
     return func
 
-def A(x,u,varphi):
-    X = SX.sym("X",12)
-    U = SX.sym("U",4)   
-    func = Function('A',[X,U],[jacobian(dynamics(X,U,varphi),X)],['X','U'],['A'])
+def rk4_with_res():
+    DT = MX.sym("DT", 1)
+    X = MX.sym("X",12)
+    U = MX.sym("U",4)    
+    Varphi = MX.sym("Varphi",1)
+    params_sym  = l4c_residual_model.get_sym_params()
+
+    # Fixed step Runge-Kutta 4 integrator
+    k1 = dynamics_with_res_func()(X, U, Varphi,params_sym)
+    k2 = dynamics_with_res_func()(X + DT / 2 * k1, U, Varphi,params_sym)
+    k3 = dynamics_with_res_func()(X + DT / 2 * k2, U, Varphi,params_sym)
+    k4 = dynamics_with_res_func()(X + DT * k3, U, Varphi,params_sym)
+    x_next = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+    func = Function('rk4_with_res', [DT, X, U, Varphi, params_sym], [x_next])
+    return func
+
+def rk4_with_disc_res():
+    DT = MX.sym("DT", 1)
+    X = MX.sym("X",12)
+    U = MX.sym("U",4)    
+    Varphi = MX.sym("Varphi",1)
+    params_sym  = l4c_residual_model.get_sym_params()
+
+    # Fixed step Runge-Kutta 4 integrator
+    k1 = dynamics_func()(X, U, Varphi)
+    k2 = dynamics_func()(X + DT / 2 * k1, U, Varphi)
+    k3 = dynamics_func()(X + DT / 2 * k2, U, Varphi)
+    k4 = dynamics_func()(X + DT * k3, U, Varphi)
+    x_next = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+    # get residual function
+    F_res = f_res()
+
+    # add the discrete residual dynamics
+    # get conditioning variables
+    cond = MX([])
+    for state_idx in model_states_in_idx:
+        cond = vertcat(cond,X[state_idx])
+    for input_idx in model_inputs_in_idx:
+        cond = vertcat(cond,U[input_idx])
+    if model_phi_in:
+        cond = vertcat(cond,Varphi)  
+    if model_dt_in:
+        cond = vertcat(cond,DT)
+
+    # add residual dynamics to nominal dynamics
+    F_residual = F_res(cond.T,params_sym)
+    count = 0
+
+    for state_idx in model_states_out_idx:
+        x_next[state_idx] += F_residual[count]
+        count += 1
+
+    return Function('rk4_with_disc_res', [DT, X, U, Varphi, params_sym], [x_next])
+
+def rk4_with_ground_effect():
+    DT = MX.sym("DT", 1)
+    X = MX.sym("X",12)
+    U = MX.sym("U",4)    
+    Varphi = MX.sym("Varphi",1)
+
+    # Fixed step Runge-Kutta 4 integrator
+    k1 = dynamics_ground_effect_func()(X, U, Varphi)
+    k2 = dynamics_ground_effect_func()(X + DT / 2 * k1, U, Varphi)
+    k3 = dynamics_ground_effect_func()(X + DT / 2 * k2, U, Varphi)
+    k4 = dynamics_ground_effect_func()(X + DT * k3, U, Varphi)
+    x_next = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+    func = Function('rk4_with_ground_effect', [DT, X, U, Varphi], [x_next])
+    return func    
+
+def A_func(x,u,varphi):
+    X = MX.sym("X",12)
+    U = MX.sym("U",4)   
+    func = Function('A_func',[X,U],[jacobian(dynamics_func()(X,U,varphi),X)])
     return np.array(func(x,u))
 
-def B(x,u,varphi):
-    X = SX.sym("X",12)
-    U = SX.sym("U",4)    
-    func = Function('B',[X,U],[jacobian(dynamics(X,U,varphi),U)],['X','U'],['B'])
+def B_func(x,u,varphi):
+    X = MX.sym("X",12)
+    U = MX.sym("U",4)    
+    func = Function('B_func',[X,U],[jacobian(dynamics_func()(X,U,varphi),U)])
     return np.array(func(x,u))
 
+# useable acados models
 def export_robot_model() -> AcadosModel:
     model_name = "morphing_lander"
 
@@ -278,24 +442,29 @@ def export_robot_model() -> AcadosModel:
     X = MX.sym("X",12)
     U = MX.sym("U",4)
 
-    # Explicit dynamics
-    f_expl = dynamics(X,U,varphi)
     if use_residual_model:
-        cond  = vertcat(X[2],X[3],X[4],X[5],X[6],X[7],X[8],U)
-        # cond  = vertcat(X[2],X[3],X[4],X[5],X[6],X[7],X[8],U,varphi)
-        f_res = l4c_residual_model(cond)
-        f_expl = f_expl + f_res
+        # add realtime approximation parameters to acados parameters
+        dummy = l4c_residual_model(MX(model_ninputs,1))
+        params_sym = l4c_residual_model.get_sym_params()
+        p = vertcat(p,params_sym)   
+
+        # Explicit dynamics with residual correction
+        f_expl = dynamics_with_res_func()(X,U,varphi,params_sym)
+
+    else:
+        # Explicit nominal dynamics
+        f_expl = dynamics_func()(X,U,varphi)
 
     # xdot
-    x_B_dot = MX.sym("x_B_dot")
-    y_B_dot = MX.sym("y_B_dot")
-    z_B_dot = MX.sym("z_B_dot")
+    x_B_dot      = MX.sym("x_B_dot")
+    y_B_dot      = MX.sym("y_B_dot")
+    z_B_dot      = MX.sym("z_B_dot")
     theta_Bz_dot = MX.sym("theta_Bz_dot")
     theta_By_dot = MX.sym("theta_By_dot")
     theta_Bx_dot = MX.sym("theta_Bx_dot")
-    dx_B_dot = MX.sym("dx_B_dot")
-    dy_B_dot = MX.sym("dy_B_dot")
-    dz_B_dot = MX.sym("dz_B_dot")
+    dx_B_dot     = MX.sym("dx_B_dot")
+    dy_B_dot     = MX.sym("dy_B_dot")
+    dz_B_dot     = MX.sym("dz_B_dot")
     omega_Bx_dot = MX.sym("omega_Bx_dot")
     omega_By_dot = MX.sym("omega_By_dot")
     omega_Bz_dot = MX.sym("omega_Bz_dot")
@@ -318,30 +487,134 @@ def export_robot_model() -> AcadosModel:
 
     return model
 
-def F_numeric(thetax,thetay,thetaz):
-    # Create symbolic variables
-    theta_Bx = SX.sym('theta_Bx', 1)
-    theta_By = SX.sym('theta_By', 1)
-    theta_Bz = SX.sym('theta_Bz', 1)
+def export_discrete_robot_model(DT) -> AcadosModel:
+    model_name = "morphing_lander"
 
-    # Call the original function with symbolic variables
-    symbolic_result = F(theta_Bx,theta_By,theta_Bz)
+    # tilt angle
+    varphi = MX.sym("varphi",1)
+    p = varphi
 
-    # Create a function to evaluate the symbolic expression numerically
-    numerical_function = Function('F_numeric', [theta_Bx,theta_By,theta_Bz], [symbolic_result])
+    # states and controls
+    X = MX.sym("X",12)
+    U = MX.sym("U",4)
 
-    # Evaluate the symbolic expression numerically
-    numerical_result = numerical_function(thetax,thetay,thetaz)
+    if use_residual_model:
+        # add realtime approximation parameters to acados parameters
+        dummy = l4c_residual_model(MX(model_ninputs,1))
+        params_sym = l4c_residual_model.get_sym_params()
+        p = vertcat(p,params_sym)   
 
-    return np.array(numerical_result)
+        # get discrete dynamics with residual correction
+        F = rk4_with_disc_res()(DT,X,U,varphi,params_sym)
 
-def S_numeric(X,phi):
+    else:
+        # get discrete nominal dynamics
+        F = rk4()(DT,X,U,varphi)
+
+    model = AcadosModel()
+    model.name = model_name
+    model.x = X
+    model.u = U
+    model.p = p
+    model.disc_dyn_expr = F
+
+    return model
+
+def export_robot_model_ground_effect() -> AcadosModel:
+    model_name = "morphing_lander"
+
+    # tilt angle
+    varphi = MX.sym("varphi",1)
+    p = varphi
+
+    # states and controls
+    X = MX.sym("X",12)
+    U = MX.sym("U",4)
+
+    # Explicit dynamics
+    f_expl = dynamics_ground_effect_func()(X,U,varphi)
+
+    # xdot
+    x_B_dot      = MX.sym("x_B_dot")
+    y_B_dot      = MX.sym("y_B_dot")
+    z_B_dot      = MX.sym("z_B_dot")
+    theta_Bz_dot = MX.sym("theta_Bz_dot")
+    theta_By_dot = MX.sym("theta_By_dot")
+    theta_Bx_dot = MX.sym("theta_Bx_dot")
+    dx_B_dot     = MX.sym("dx_B_dot")
+    dy_B_dot     = MX.sym("dy_B_dot")
+    dz_B_dot     = MX.sym("dz_B_dot")
+    omega_Bx_dot = MX.sym("omega_Bx_dot")
+    omega_By_dot = MX.sym("omega_By_dot")
+    omega_Bz_dot = MX.sym("omega_Bz_dot")
+
+    Xdot = vertcat(x_B_dot,y_B_dot,z_B_dot,theta_Bz_dot,theta_By_dot,theta_Bx_dot,dx_B_dot,dy_B_dot,dz_B_dot,omega_Bx_dot,omega_By_dot,omega_Bz_dot)
+
+    # write implicit dynamics 
+    f_impl = Xdot - f_expl
+
+    model = AcadosModel()
+
+    model.f_impl_expr = f_impl
+    model.f_expl_expr = f_expl
+    model.x = X
+    model.xdot = Xdot
+    model.u = U
+    # model.z = z
+    model.p = p
+    model.name = model_name
+
+    return model
+
+def export_robot_model_phi() -> AcadosModel:
+    model_name = "morphing_lander"
+
+    # states and controls
+    X = MX.sym("X",13)
+    U = MX.sym("U",5)
+
+    # Explicit dynamics
+    f_expl = dynamics_phi_func()(X,U)
+
+    # xdot
+    x_B_dot = MX.sym("x_B_dot")
+    y_B_dot = MX.sym("y_B_dot")
+    z_B_dot = MX.sym("z_B_dot")
+    theta_Bz_dot = MX.sym("theta_Bz_dot")
+    theta_By_dot = MX.sym("theta_By_dot")
+    theta_Bx_dot = MX.sym("theta_Bx_dot")
+    dx_B_dot = MX.sym("dx_B_dot")
+    dy_B_dot = MX.sym("dy_B_dot")
+    dz_B_dot = MX.sym("dz_B_dot")
+    omega_Bx_dot = MX.sym("omega_Bx_dot")
+    omega_By_dot = MX.sym("omega_By_dot")
+    omega_Bz_dot = MX.sym("omega_Bz_dot")
+    varphi_dot = MX.sym("varphi_dot")
+
+    Xdot = vertcat(x_B_dot,y_B_dot,z_B_dot,theta_Bz_dot,theta_By_dot,theta_Bx_dot,dx_B_dot,dy_B_dot,dz_B_dot,omega_Bx_dot,omega_By_dot,omega_Bz_dot,varphi_dot)
+
+    # write implicit dynamics 
+    f_impl = Xdot - f_expl
+
+    model = AcadosModel()
+
+    model.f_impl_expr = f_impl
+    model.f_expl_expr = f_expl
+    model.x = X
+    model.xdot = Xdot
+    model.u = U
+    # model.z = z
+    # model.p = p
+    model.name = model_name
+
+    return model
+
     # Create symbolic variables
     X_sym = SX.sym('X', len(X))
     phi_sym = SX.sym('phi',1)
 
     # Call the original function with symbolic variables
-    symbolic_result = S_(X_sym,phi_sym)
+    symbolic_result = S_func(X_sym,phi_sym)
 
     # Create a function to evaluate the symbolic expression numerically
     numerical_function = Function('S_numeric', [X_sym,phi_sym], [symbolic_result])

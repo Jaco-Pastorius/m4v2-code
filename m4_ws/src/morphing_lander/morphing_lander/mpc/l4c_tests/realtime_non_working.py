@@ -1,62 +1,8 @@
+import casadi as cs
 import torch
+import l4casadi as l4c
 from typing import Optional
-from IPython import embed
-
-class MLPZero(torch.nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, hidden_dims: list):
-        super(MLPZero, self).__init__()
-
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.hidden_dims = hidden_dims
-
-        # Create the layers.
-        self.layers = torch.nn.ModuleList()
-        prev_dim = input_dim
-        for dim in hidden_dims:
-            self.layers.append(torch.nn.Linear(prev_dim, dim))
-            self.layers.append(torch.nn.ReLU())
-            prev_dim = dim
-        self.layers.append(torch.nn.Linear(prev_dim, output_dim))
-
-        # Model is not trained -- setting output to zero
-        with torch.no_grad():
-            self.layers[-1].bias.fill_(0.)
-            self.layers[-1].weight.fill_(0.)
-
-    def forward(self, x: torch.tensor):
-        for layer in self.layers:
-            x = layer(x)
-        return x
-
-    def loss(self,data,cond):
-        predicted_data = self.forward(cond)
-        return torch.mean(torch.abs(data - predicted_data))
-
-# class MLPZero(torch.nn.Module):
-#     def __init__(self,layers):
-#         super().__init__()
-
-#         self.input_layer = torch.nn.Linear(12, layers[0])
-
-#         hidden_layers = []
-#         for i in range(1,len(layers)):
-#             hidden_layers.append(torch.nn.Linear(512, 512))
-
-#         self.hidden_layer = torch.nn.ModuleList(hidden_layers)
-#         self.out_layer = torch.nn.Linear(512, 12)
-
-#         # Model is not trained -- setting output to zero
-#         with torch.no_grad():
-#             self.out_layer.bias.fill_(0.)
-#             self.out_layer.weight.fill_(0.)
-
-#     def forward(self, x):
-#         x = self.input_layer(x)
-#         for layer in self.hidden_layer:
-#             x = torch.tanh(layer(x))
-#         x = self.out_layer(x)
-#         return x
+import numpy as np
 
 class Normalizer(torch.nn.Module):
     """
@@ -145,10 +91,6 @@ class MLP(torch.nn.Module):
             x = layer(x)
         return x
 
-    def loss(self,data,cond):
-        predicted_data = self.forward(cond)
-        return torch.mean(torch.abs(data - predicted_data))
-
 class CVAE(torch.nn.Module):
     """
     Implements a conditional variational autoencoder (CVAE) with
@@ -216,6 +158,8 @@ class CVAE(torch.nn.Module):
             input_dim=cond_dim, output_dim=2 * latent_dim, hidden_dims=prior_layers
         )
 
+        self.samples = torch.randn((100, 1, 1))
+
     def encode(self, x: torch.tensor, cond: torch.tensor):
         """
         Encodes the input data and returns the mean and variance of the latent space.
@@ -254,116 +198,66 @@ class CVAE(torch.nn.Module):
         prior_params = self.prior_network(cond)
         prior_mean, prior_logvar = torch.chunk(prior_params, 2, dim=-1)
         prior_variance = torch.exp(prior_logvar)
+        # prior_mean = torch.zeros_like(prior_mean)
+        # prior_variance = torch.ones_like(prior_variance)
+
         return prior_mean, prior_variance
 
     def forward(self, cond: torch.tensor):
-        num_samples = 500
-        with torch.no_grad():
-            cond = self.cond_normalizer.normalize(cond)
-
-            # Sample the prior.
-            prior_mean, prior_var = self.prior(cond)
-            
-            # Regularize the covariance
-            prior_var += 1e-6
-
-            # Define the prior distribution
-            prior_dist = torch.distributions.MultivariateNormal(
-                loc=prior_mean, covariance_matrix=torch.diag_embed(prior_var), validate_args=False
-            )
-
-            # z = prior_dist.sample((num_samples,))
-            z = prior_dist.rsample((num_samples,))
-
-            cond_expanded = cond.unsqueeze(0).expand(num_samples, -1, -1)
-
-            # Decode the samples
-            pred_mean_expanded, pred_var_expanded = self.decode(
-                z, cond_expanded, unnormalize=True
-            )
-
-            pred_mean = pred_mean_expanded.mean(dim=0)
-            pred_var_expanded = torch.diag_embed(pred_var_expanded)
-
-            pred_var = torch.mean(
-                pred_var_expanded
-                + pred_mean_expanded.unsqueeze(-1) * pred_mean_expanded.unsqueeze(-2),
-                dim=0,
-            )
-
-            pred_var = pred_var - pred_mean.unsqueeze(-1) @ pred_mean.unsqueeze(-2)
-
-            return pred_mean #, pred_var
-    
-    def loss(self,data,cond):
-        # Normalize the data.
-        data = self.output_normalizer.normalize(data)
+        num_samples = 100
         cond = self.cond_normalizer.normalize(cond)
 
-        # Encode the data.
-        z_mean, z_var = self.encode(data, cond)
-        assert z_mean.shape == z_var.shape
-        assert z_mean.shape[-1] == self.latent_dim
-        z_var = z_var + 1e-6
-
-        # Sample from the latent space.
-        latent_dist = torch.distributions.MultivariateNormal(
-            z_mean, torch.diag_embed(z_var)
-        )
-        z = latent_dist.rsample()
-
-        # Decode the latent code.
-        output_mean, output_var = self.decode(z, cond, unnormalize=False)
-        assert output_mean.shape == output_var.shape
-        assert output_mean.shape[-1] == self.output_dim
-        output_var = output_var + 1e-6
-
-        # Compute the reconstruction loss.
-        recon_loss = torch.distributions.MultivariateNormal(
-            output_mean, torch.diag_embed(output_var)
-        ).log_prob(data)
-
-        # Compute the KL divergence.
+        # Sample the prior.
         prior_mean, prior_var = self.prior(cond)
-        prior_var = prior_var + 1e-6
-        kl_div = torch.distributions.kl.kl_divergence(
-            latent_dist,
-            torch.distributions.MultivariateNormal(prior_mean, torch.diag_embed(prior_var)),
+
+        prior_dist = torch.distributions.MultivariateNormal(
+            loc=prior_mean, covariance_matrix=torch.diag_embed(prior_var), validate_args=False
         )
 
-        # Compute the ELBO.
-        elbo = recon_loss - kl_div
+        z = prior_dist.rsample((num_samples,))
+        # z = torch.ones((num_samples, 1, 1))
 
-        return -elbo.mean(dim=0)
-    
-class CVAEZero(CVAE):
-    def __init__(
-        self,
-        output_dim: int,
-        latent_dim: int,
-        cond_dim: int,
-        encoder_layers: list,
-        decoder_layers: list,
-        prior_layers: list,
-        cond_mean: Optional[torch.tensor] = None,
-        cond_var: Optional[torch.tensor] = None,
-        output_mean: Optional[torch.tensor] = None,
-        output_var: Optional[torch.tensor] = None,
-    ):
-        super(CVAEZero, self).__init__(
-                                        output_dim,
-                                        latent_dim,
-                                        cond_dim,
-                                        encoder_layers,
-                                        decoder_layers,
-                                        prior_layers,
-                                        cond_mean,
-                                        cond_var,
-                                        output_mean,
-                                        output_var
-                                        )
-        
-        # Model is not trained -- setting output to zero
-        with torch.no_grad():
-            self.decoder.layers[-1].bias.fill_(0.)
-            self.decoder.layers[-1].weight.fill_(0.)
+        cond_expanded = cond.unsqueeze(0).expand(num_samples, -1, -1)
+
+        # Decode the samples
+        pred_mean_expanded, pred_var_expanded = self.decode(
+            z, cond_expanded, unnormalize=True
+        )
+
+
+        pred_mean = pred_mean_expanded.mean(dim=0)
+        pred_var_expanded = torch.diag_embed(pred_var_expanded)
+
+        pred_var = torch.mean(
+            pred_var_expanded
+            + pred_mean_expanded.unsqueeze(-1) * pred_mean_expanded.unsqueeze(-2),
+            dim=0,
+        )
+
+        pred_var = pred_var - pred_mean.unsqueeze(-1) @ pred_mean.unsqueeze(-2)
+
+        return pred_mean #, pred_var #L4CasADi expects a single output
+
+model = CVAE(output_dim=2,
+                     latent_dim=1,
+                     cond_dim=2,
+                     encoder_layers=[16,16],
+                     decoder_layers=[16,16],
+                     prior_layers  =[16,16],
+                    )
+l4c_model = l4c.realtime.RealTimeL4CasADi(model, approximation_order=1)  # device='cuda' for GPU
+
+in_sym = cs.MX.sym('in_sym',2,1)
+y_sym = l4c_model(in_sym) # call model once before getting parameters
+casadi_func = cs.Function('model_rt_approx',
+                        [in_sym, l4c_model.get_sym_params()],
+                        [y_sym])
+
+x = np.ones([10, 2])  # torch needs batch dimension
+casadi_param = l4c_model.get_params(x)
+casadi_out = casadi_func(x.T, casadi_param.T)  # transpose for vector rep. expected by casadi
+
+t_out = model(torch.tensor(x, dtype=torch.float32))
+
+print(casadi_out)
+print(t_out)

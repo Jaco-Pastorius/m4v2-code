@@ -1,28 +1,59 @@
 from os import getenv
 from numpy import pi,diag,deg2rad
 from pathlib import Path
-from l4casadi import L4CasADi
+from l4casadi.realtime import RealTimeL4CasADi  
 
 import torch, yaml, os
-from morphing_lander.cvae.train import TrainConfig
-from morphing_lander.cvae.models import CVAE
+from morphing_lander.cvae.train import TrainConfigCVAE, TrainConfigMLP
+from morphing_lander.cvae.models import CVAE, MLP, MLPZero, CVAEZero
 
-def load_trained_cvae(model_path):
+def load_trained_cvae(model_path,ninputs,noutputs):
+    if model_path is None:
+        model = CVAE(
+            output_dim=noutputs,
+            latent_dim=2,
+            cond_dim=ninputs,
+            encoder_layers=[32,32],
+            decoder_layers=[32,32],
+            prior_layers=[32,32],
+        )
+        model.to('cuda')
+    else:
+        # Load the config from file
+        model_path = Path(model_path)
+        config_file = model_path / "config.yaml"
+        with open(config_file, "r") as f:
+            config_dict = yaml.safe_load(f)
+            config = TrainConfigCVAE(**config_dict)
+
+        # Load the latest checkpoint (of all .pth files under model_path)
+        model_file = max(model_path.glob("*.pth"), key=os.path.getctime)
+        model = CVAE(
+            output_dim=config.output_dim,
+            latent_dim=config.latent_dim,
+            cond_dim=config.cond_dim,
+            encoder_layers=config.encoder_layers,
+            decoder_layers=config.decoder_layers,
+            prior_layers=config.prior_layers,
+        )
+        model.load_state_dict(torch.load(model_file))
+        model.to(config.device)
+    model.eval()
+    return model
+
+def load_trained_mlp(model_path):
     # Load the config from file
     config_file = model_path / "config.yaml"
     with open(config_file, "r") as f:
         config_dict = yaml.safe_load(f)
-        config = TrainConfig(**config_dict)
+        config = TrainConfigMLP(**config_dict)
 
     # Load the latest checkpoint (of all .pth files under model_path)
     model_file = max(model_path.glob("*.pth"), key=os.path.getctime)
-    model = CVAE(
+    model = MLP(
+        input_dim=config.input_dim,
         output_dim=config.output_dim,
-        latent_dim=config.latent_dim,
-        cond_dim=config.cond_dim,
-        encoder_layers=config.encoder_layers,
-        decoder_layers=config.decoder_layers,
-        prior_layers=config.prior_layers,
+        hidden_dims=config.hidden_layers,
     )
     model.load_state_dict(torch.load(model_file))
     model.to(config.device)
@@ -33,38 +64,70 @@ def load_trained_cvae(model_path):
 params_ = {}
 
 # high level parameters
-params_['Ts']                 = 0.01                           # control frequency of MPC
-params_['Ts_tilt_controller'] = 0.01                           # control frequency of TiltController
-params_['queue_size']         = 1                              # queue size of ros2 messages
-params_['warmup_time']        = 1.0                            # time after which mpc controller is started (seconds)
+params_['Ts']                    = 0.01                           # control frequency of MPC
+params_['Ts_tilt_controller']    = 0.01                           # control frequency of TiltController
+params_['queue_size']            = 1                              # queue size of ros2 messages
+params_['warmup_time']           = 1.0                            # time after which mpc controller is started (seconds)
 
 # acados mpc solver and integrator paths
-params_['acados_ocp_path'] = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_models/'
-params_['acados_sim_path'] = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_sims/'
+params_['acados_ocp_path']       = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_models/'
+params_['acados_sim_path']       = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_sims/'
+
+# generate and build flags
+params_['generate_mpc']          = True
+params_['build_mpc']             = True
+
+# use residual model ?
+params_['use_residual_model']    = False
+
+# residual model training parameters
+params_['model_states_in_idx']   = [2]
+params_['model_inputs_in_idx']   = [0,1,2,3]
+params_['model_phi_in']          = True
+params_['model_dt_in']           = False
+params_['model_states_out_idx']  = [8]
+params_['model_ninputs']         = len(params_.get('model_states_in_idx')) + len(params_.get('model_inputs_in_idx')) + params_.get('model_phi_in') + params_.get('model_dt_in')
+params_['model_noutputs']        = len(params_.get('model_states_out_idx'))
 
 # l4casadi build path
-params_['device'] = 'cuda'
-params_['use_residual_model']  = True
-params_['l4c_build_path'] = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/l4c_models/'
-params_['learned_model_path'] = Path('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/learned_models/2024-05-21_23-08-03')
-params_['l4c_residual_model']  = L4CasADi(load_trained_cvae(params_.get('learned_model_path')), model_expects_batch_dim=True, device=params_.get('device'), build_dir=params_.get('l4c_build_path'))
+params_['device']                = 'cuda'
+
+params_['learned_model_path']    = None
+params_['l4c_residual_model']    = RealTimeL4CasADi(load_trained_cvae(params_.get('learned_model_path'),
+                                                                      params_.get('model_ninputs'),
+                                                                      params_.get('model_noutputs')), 
+                                                    approximation_order=1,
+                                                    device=params_.get('device'))
+# params_['l4c_residual_model']    = RealTimeL4CasADi(CVAEZero(output_dim=params_.get('model_noutputs'),
+#                                                              latent_dim=2,
+#                                                              cond_dim=params_.get('model_ninputs'),
+#                                                              encoder_layers=[32,32],
+#                                                              decoder_layers=[32,32],
+#                                                              prior_layers=[32,32]), 
+#                                                     approximation_order=2,
+#                                                     device=params_.get('device'))
+# params_['l4c_residual_model']    = RealTimeL4CasADi(MLPZero(input_dim=params_.get('model_ninputs'),
+#                                                             output_dim=params_.get('model_noutputs'),
+#                                                             hidden_dims=[512,512]),
+#                                                     approximation_order=2,
+#                                                     device=params_.get('device'))
 
 # gazebo real time factor
-params_['real_time_factor'] = 1.0
+params_['real_time_factor']      = 1.0
 
 # max velocities
-params_['max_dx'] = 0.5
-params_['max_dy'] = 0.5
-params_['max_dz'] = 0.5
+params_['max_dx']                = 0.5
+params_['max_dy']                = 0.5
+params_['max_dz']                = 0.5
 
 # rc inputs
-params_['min']  = 1094
-params_['max']  = 1934
-params_['dead'] = 1514
+params_['min']                   = 1094
+params_['max']                   = 1934
+params_['dead']                  = 1514
 
 # safety parameters
-params_['max_tilt_in_flight'] = deg2rad(50)
-params_['max_tilt_on_land'] = deg2rad(85)
+params_['max_tilt_in_flight']    = deg2rad(50)
+params_['max_tilt_on_land']      = deg2rad(85)
 
 # ground detector parameters
 # params_['land_height'] = -0.40                        # height at which we consider robot landed
@@ -110,7 +173,6 @@ params_['r_AR1_x']          = 0.16491
 params_['r_AR1_y']          = 0.13673
 params_['r_AR1_z']          = -0.069563
 
-
 # constraint variables
 params_['u_max']            = 1.0
 params_['v_max_absolute']   = (pi/2)/4
@@ -142,7 +204,6 @@ params_['Q_mat_terminal'] = params_['gamma'] * params_['Q_mat']
 # lqr terminal cost
 
 # from control import lqr, ctrb
-
 
 # phi = 0.0
 # Ac = A(X_ref,U_ref/cos(phi),phi)

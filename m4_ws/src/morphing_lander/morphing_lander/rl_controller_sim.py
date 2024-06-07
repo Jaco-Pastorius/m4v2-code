@@ -71,26 +71,6 @@ class MPCSim(MPCBase):
         
     def offboard_mode_trigger(self):
         return True
-    
-    def get_reference(self):
-        x_ref = zeros(12)
-        u_ref = zeros(4)
-
-        x_ref[0] = self.state[0] + self.input[0]
-        x_ref[1] = self.state[1] + self.input[1]
-        x_ref[2] = self.state[2] + self.input[2]
-
-        x_ref[6] = self.input[0]
-        x_ref[7] = self.input[1]
-        x_ref[8] = self.input[2]
-
-        if self.input[2] > 0.0 and self.state[2] > -1.0:
-            tilt_vel = 1.0
-        else:
-            tilt_vel = -1.0
-        # tilt_vel = 0.0
-
-        return x_ref, u_ref, tilt_vel
 
     def publish_actuator_motors(self,u):
         # publish to px4

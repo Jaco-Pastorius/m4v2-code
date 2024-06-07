@@ -2,10 +2,11 @@ from setuptools import setup
 from glob import glob
 import os
 
-package_name         = 'morphing_lander'
-mpc_submodule        = 'morphing_lander/mpc'
-cvae_submodule       = 'morphing_lander/cvae'
-data_utils_submodule = 'morphing_lander/data_utils'
+package_name                  = 'morphing_lander'
+mpc_submodule                 = 'morphing_lander/mpc'
+cvae_submodule                = 'morphing_lander/cvae'
+data_utils_submodule          = 'morphing_lander/data_utils'
+
 setup(
     name=package_name,
     version='0.0.0',
@@ -29,6 +30,7 @@ setup(
             'tilt_controller_sim = morphing_lander.tilt_controller_sim:main',
             'mpc_controller_hardware = morphing_lander.mpc_controller_hardware:main',
             'mpc_controller_sim = morphing_lander.mpc_controller_sim:main',
+            'rl_controller_sim = morphing_lander.rl_controller_sim:main',
             'load_cell_test = morphing_lander.load_cell_test:main',
             'relay_mocap = morphing_lander.relay_mocap:main'
         ],

@@ -10,3 +10,4 @@
 **/acados_sims
 **/learned_models
 **/data
+**/*.c

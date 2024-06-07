@@ -3,7 +3,7 @@ from acados_template import AcadosOcp
 import scipy.linalg
 import numpy as np
 from morphing_lander.mpc.parameters import params_
-from morphing_lander.mpc.dynamics import export_robot_model
+from morphing_lander.mpc.dynamics import export_robot_model, export_discrete_robot_model
 
 # constraint variables
 u_max          = params_.get('u_max')
@@ -17,6 +17,9 @@ T_horizon = params_.get('T_horizon')
 Q_mat          = params_.get('Q_mat')
 R_mat          = params_.get('R_mat')
 Q_mat_terminal = params_.get('Q_mat_terminal')
+
+# residual learning parameters
+model_ninputs  = params_.get('model_ninputs')
 
 # temporary references (these get overwritten the first time mpc is called)
 x_ref = np.zeros(12,dtype='float')
@@ -35,7 +38,9 @@ def create_ocp_solver_description() -> AcadosOcp:
     # create ocp object to formulate the OCP
     ocp = AcadosOcp()
 
-    model = export_robot_model()
+    # model = export_robot_model()
+    model = export_discrete_robot_model(T_horizon/N_horizon)
+
     ocp.model = model
     nx = model.x.size()[0]
     nu = model.u.size()[0]
@@ -73,23 +78,23 @@ def create_ocp_solver_description() -> AcadosOcp:
     ocp.constraints.x0 = x0
 
     # parameters
-    ocp.parameter_values = np.array([varphi0])
+    if use_residual_model:
+        l4c_params = l4c_residual_model.get_params(np.zeros((1, model_ninputs)))
+        ocp.parameter_values = np.hstack((np.array(varphi0),l4c_params.squeeze()))
+    else:
+        ocp.parameter_values = np.array([varphi0])
     
     # set options
-    ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"  # FULL_CONDENSING_QPOASES
-    ocp.solver_options.hessian_approx = "GAUSS_NEWTON"  # 'GAUSS_NEWTON', 'EXACT'
-    ocp.solver_options.integrator_type = "ERK"
-    ocp.solver_options.nlp_solver_type = "SQP_RTI"  # SQP_RTI, SQP
+    ocp.solver_options.qp_solver       = "FULL_CONDENSING_HPIPM"       # FULL_CONDENSING_QPOASES
+    ocp.solver_options.hessian_approx  = "GAUSS_NEWTON"                # 'GAUSS_NEWTON', 'EXACT'
+    # ocp.solver_options.integrator_type = "ERK"                         # IRK
+    ocp.solver_options.integrator_type ="DISCRETE"
+    ocp.solver_options.nlp_solver_type = "SQP_RTI"                     # SQP_RTI, SQP
 
     # set prediction horizon
     ocp.solver_options.tf = T_horizon
 
     # export directory
     ocp.code_export_directory = acados_ocp_path
-
-    # l4casadi
-    if use_residual_model:
-        ocp.solver_options.model_external_shared_lib_dir = l4c_residual_model.shared_lib_dir
-        ocp.solver_options.model_external_shared_lib_name = l4c_residual_model.name
 
     return ocp

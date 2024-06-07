@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 
 # Numpy imports
-from numpy import zeros,array,copy,hstack,sum,absolute,rad2deg,stack
+from numpy import zeros,array,copy,hstack,sum,absolute,rad2deg,stack,float32
 
 # Python imports
 import os 
@@ -23,15 +23,18 @@ from px4_msgs.msg    import VehicleThrustSetpoint
 from custom_msgs.msg import MPCStatus
 from custom_msgs.msg import TiltVel
 
-# Acados imports
-from acados_template import AcadosOcpSolver
-
 # Morphing lander imports
-from morphing_lander.mpc.mpc import create_ocp_solver_description
 from morphing_lander.mpc.trajectories        import traj_jump_time
 from morphing_lander.mpc.parameters          import params_
+from morphing_lander.mpc.utils               import quaternion_from_euler
 
-from IPython import embed
+# RL imports
+import onnx
+import onnxruntime as ort
+onnx_model = onnx.load("/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/rl/MorphingLander.onnx")
+onnx.checker.check_model(onnx_model)
+rl_model = ort.InferenceSession("/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/rl/MorphingLander.onnx")
+
 
 # Get parameters
 queue_size                 = params_.get('queue_size')
@@ -51,14 +54,13 @@ build_mpc                  = params_.get('build_mpc')
 model_states_in_idx        = params_.get('model_states_in_idx')
 model_inputs_in_idx        = params_.get('model_inputs_in_idx')
 model_phi_in               = params_.get('model_phi_in')
-model_dt_in                = params_.get('model_dt_in')
 model_states_out_idx       = params_.get('model_states_out_idx')
 model_ninputs              = params_.get('model_ninputs')
 model_noutputs             = params_.get('model_noutputs')
 
-class MPCBase(Node,ABC): 
+class RLBase(Node,ABC): 
     def __init__(self):
-        super().__init__('MPCBase')
+        super().__init__('RLBase')
 
         # publishers 
         self.vehicle_command_publisher_ = self.create_publisher(VehicleCommand, "/fmu/in/vehicle_command", queue_size)
@@ -90,6 +92,7 @@ class MPCBase(Node,ABC):
 
         # robot state
         self.state = zeros(12)
+        self.previous_input_rl = zeros(5)
 
         # tilt angle
         self.tilt_angle = 0.0
@@ -102,27 +105,6 @@ class MPCBase(Node,ABC):
 
         # counter
         self.counter = 0
-
-        # compile acados solver (ocp)
-        ocp  = create_ocp_solver_description()
-        self.acados_ocp_solver = AcadosOcpSolver(
-            ocp, 
-            json_file=os.path.join(acados_ocp_path, ocp.model.name + '_acados_ocp.json'),
-            generate=generate_mpc,
-            build   =build_mpc
-        )
-
-        # solver initialization
-        for stage in range(N_horizon + 1):
-            self.acados_ocp_solver.set(stage, "x", zeros(12))
-            if use_residual_model:
-                l4c_params = l4c_residual_model.get_params(zeros((1,model_ninputs)))
-                self.acados_ocp_solver.set(stage, "p", hstack((array([0.0]),l4c_params.squeeze())))
-            else:
-                self.acados_ocp_solver.set(stage, "p", array([0.0]))
-
-        for stage in range(N_horizon):
-            self.acados_ocp_solver.set(stage, "u", zeros(4))
 
     # timer callback
     def timer_callback(self):
@@ -161,34 +143,35 @@ class MPCBase(Node,ABC):
             x_current   = copy(self.state) 
             phi_current = copy(self.tilt_angle) 
 
-            # update reference (make sure reference starts from ground and ends on ground)
+            # get dummy reference (unused)
             x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(self.current_time)
-            # x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time_optimal(self.current_time)
-
-            # # update reference based on joystick/RC commands
-            # tracking_done = False
-            # x_ref,u_ref,tilt_vel = self.get_reference()
 
             # check if robot is grounded
             grounded_flag = self.ground_detector(x_current)
 
-            if tracking_done and grounded_flag:
-                print("tracking done and grounded")
-                # this means we are on the ground and have already executed the trajectory
-                # we need to switch off the thrusters and get to drive as fast as possible (if not there already)
-                # also stop running the mpc
-                u_opt = zeros(4,dtype='float')
-                tilt_vel = u_max
-                mpc_flag = False      
-                self.disarm()
+            # transform state and input for rl
+            pos_transformed        = array([ x_current[0], x_current[1],-x_current[2]])
+            quat                   = quaternion_from_euler([x_current[5],x_current[4],x_current[3]])
+            quat_transformed       = array([quat[1],quat[2],quat[3],quat[0]])
+            vel_transformed        = array([x_current[6],x_current[7],-x_current[8]])
+            rotvel_transformed     = array([x_current[9],x_current[10],x_current[11]])
+            x_current_transformed  = hstack((pos_transformed,quat_transformed,vel_transformed,rotvel_transformed))
+            obs = hstack((x_current_transformed, self.previous_input_rl))
 
-            # run mpc
-            x_next = zeros(12)
-            if mpc_flag: 
-                u_opt,x_next,comp_time = self.mpc_update(x_current,phi_current,x_ref,u_ref)
-            else:
-                u_opt = zeros(4,dtype='float')
-                comp_time = -1.0
+            # advance rl
+            start_time = time.process_time()
+            outputs = rl_model.run(
+                None,
+                {"obs": obs.astype(float32)},
+            )
+            comp_time = time.process_time() - start_time
+            print("* comp time = %5g seconds\n" % (comp_time))
+
+            # get control inputs
+            u_opt = outputs[0]
+
+            # update previous control input
+            self.previous_input_rl = copy(u_opt)
 
             # publish control inputs
             self.publish_actuator_motors(u_opt)
@@ -238,8 +221,6 @@ class MPCBase(Node,ABC):
                 cond = hstack((x_[model_states_in_idx],u_[model_inputs_in_idx]))
                 if model_phi_in:
                     cond = hstack((cond,phicurrent))
-                if model_dt_in:
-                    cond = hstack((cond,Ts))
                 cond_vec.append(cond)
             params = l4c_residual_model.get_params(stack(cond_vec,axis=0))
             for jj in range(N_horizon):
