@@ -2,11 +2,15 @@
 from abc import ABC, abstractmethod
 
 # Numpy imports
-from numpy import zeros,array,copy,hstack,sum,absolute,rad2deg,stack,float32
+import numpy as np 
 
 # Python imports
 import os 
 import time
+from IPython import embed
+
+
+from scipy.spatial.transform import Rotation as R
 
 # ROS imports
 from rclpy.node  import Node
@@ -23,17 +27,17 @@ from px4_msgs.msg    import VehicleThrustSetpoint
 from custom_msgs.msg import MPCStatus
 from custom_msgs.msg import TiltVel
 
+# Acados imports
+from acados_template import AcadosOcpSolver
+
 # Morphing lander imports
-from morphing_lander.mpc.trajectories        import traj_jump_time
+from morphing_lander.mpc.mpc                 import create_ocp_solver_description
+from morphing_lander.mpc.trajectories        import traj_fly_up
 from morphing_lander.mpc.parameters          import params_
-from morphing_lander.mpc.utils               import quaternion_from_euler
+from morphing_lander.mpc.utils               import ONNXModel, quaternion_from_euler
 
 # RL imports
-import onnx
-import onnxruntime as ort
-onnx_model = onnx.load("/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/rl/MorphingLander.onnx")
-onnx.checker.check_model(onnx_model)
-rl_model = ort.InferenceSession("/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/rl/MorphingLander.onnx")
+rl_model = ONNXModel("/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/rl/MorphingLander.onnx")
 
 
 # Get parameters
@@ -91,8 +95,8 @@ class RLBase(Node,ABC):
         self.mpc_status = 0
 
         # robot state
-        self.state = zeros(12)
-        self.previous_input_rl = zeros(5)
+        self.state = np.zeros(12)
+        self.previous_input_rl = np.zeros(5)
 
         # tilt angle
         self.tilt_angle = 0.0
@@ -105,6 +109,22 @@ class RLBase(Node,ABC):
 
         # counter
         self.counter = 0
+
+        # compile acados solver (ocp)
+        ocp  = create_ocp_solver_description()
+        self.acados_ocp_solver = AcadosOcpSolver(
+            ocp, 
+            json_file=os.path.join(acados_ocp_path, ocp.model.name + '_acados_ocp.json'),
+            generate=generate_mpc,
+            build   =build_mpc
+        )
+
+        # solver initialization
+        for stage in range(N_horizon + 1):
+            self.acados_ocp_solver.set(stage, "x", np.zeros(12))
+            self.acados_ocp_solver.set(stage, "p", np.array([0.0]))
+        for stage in range(N_horizon):
+            self.acados_ocp_solver.set(stage, "u", np.zeros(4))
 
     # timer callback
     def timer_callback(self):
@@ -127,11 +147,17 @@ class RLBase(Node,ABC):
         
         # if statement guarantees that offboard mode is exited when offboard switch is pushed other way
         if self.offboard and offboard_flag:
+
             # keep offboard mode alive by publishing heartbeat
             self.publish_offboard_control_mode_direct_actuator() 
 
             # trigger mpc
             mpc_flag = self.mpc_trigger()
+            print(f"mpc_flag: {mpc_flag}")
+
+            # trigger rl
+            rl_flag = self.rl_trigger()
+            print(f"rl_flag: {rl_flag}")
 
             # when mpc is triggered initialize the time
             if mpc_flag and (not self.time_initialized): self.initialize_time()
@@ -140,38 +166,60 @@ class RLBase(Node,ABC):
             if self.time_initialized: self.advance_time()
 
             # get current state and tilt angle (self.state is updated by odometry callback)
-            x_current   = copy(self.state) 
-            phi_current = copy(self.tilt_angle) 
+            x_current   = np.copy(self.state) 
+            phi_current = np.copy(self.tilt_angle) 
 
-            # get dummy reference (unused)
-            x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(self.current_time)
-
+            # update reference (make sure reference starts from ground and ends on ground)
+            x_ref,u_ref,tilt_vel,tracking_done = traj_fly_up(self.current_time)
+   
             # check if robot is grounded
             grounded_flag = self.ground_detector(x_current)
 
-            # transform state and input for rl
-            pos_transformed        = array([ x_current[0], x_current[1],-x_current[2]])
-            quat                   = quaternion_from_euler([x_current[5],x_current[4],x_current[3]])
-            quat_transformed       = array([quat[1],quat[2],quat[3],quat[0]])
-            vel_transformed        = array([x_current[6],x_current[7],-x_current[8]])
-            rotvel_transformed     = array([x_current[9],x_current[10],x_current[11]])
-            x_current_transformed  = hstack((pos_transformed,quat_transformed,vel_transformed,rotvel_transformed))
-            obs = hstack((x_current_transformed, self.previous_input_rl))
+            if tracking_done and grounded_flag:
+                print("tracking done and grounded")
+                # this means we are on the ground and have already executed the trajectory
+                # we need to switch off the thrusters and get to drive as fast as possible (if not there already)
+                # also stop running the mpc
+                u_opt = np.zeros(4,dtype='float')
+                tilt_vel = u_max
+                mpc_flag = False      
+                self.disarm()
 
-            # advance rl
-            start_time = time.process_time()
-            outputs = rl_model.run(
-                None,
-                {"obs": obs.astype(float32)},
-            )
-            comp_time = time.process_time() - start_time
-            print("* comp time = %5g seconds\n" % (comp_time))
+            # run mpc
+            x_next = np.zeros(12)
+            if mpc_flag and not rl_flag: 
+                u_opt,x_next,comp_time = self.mpc_update(x_current,phi_current,x_ref,u_ref)
+                print(f"position: {x_current[:3]}")
+                print(f"velocity: {x_current[6:9]}")
+                print(f"eulerZYX: {x_current[3:6]}")
+                print(f"quaternion: {R.from_euler('zyx', [x_current[3],x_current[4],x_current[5]]).as_quat()}")
+            elif rl_flag:
+                # transform state and input for rl
+                obs = rl_model.preprocess_obs(x_current,phi_current,self.previous_input_rl)
 
-            # get control inputs
-            u_opt = outputs[0]
+                # advance rl
+                start_time = time.process_time()
+                outputs = rl_model.predict(obs)
+                comp_time = time.process_time() - start_time
+                print("* comp time = %5g seconds\n" % (comp_time))
 
-            # update previous control input
-            self.previous_input_rl = copy(u_opt)
+                # get control inputs
+                u_rl = rl_model.postprocess_actions(outputs)
+
+                # print u_rl
+                print(f"u_rl: {u_rl}")
+
+                # update previous control input
+                self.previous_input_rl = np.copy(u_rl)
+
+                # get desired tilt velocity
+                tilt_vel = -u_rl[-1].astype(np.float32) 
+
+                # get control input for px4
+                u_opt = u_rl[:-1]
+            else:
+                u_opt = np.zeros(4,dtype='float')
+                comp_time = -1.0
 
             # publish control inputs
             self.publish_actuator_motors(u_opt)
@@ -186,7 +234,7 @@ class RLBase(Node,ABC):
             print(f"tilt_vel : {tilt_vel}")
 
             # publish thrust for landing estimator
-            self.publish_vehicle_thrust_setpoint(-sum(u_opt)/4)
+            # self.publish_vehicle_thrust_setpoint(-np.sum(u_opt)/4)
 
             # publish log values
             self.publish_log(x_current,u_opt,x_ref,u_ref,self.tilt_angle,tilt_vel,self.mpc_status,comp_time,tracking_done,grounded_flag,x_next)
@@ -214,22 +262,22 @@ class RLBase(Node,ABC):
             cond_vec = []
             print("using residual model")
             for j in range(N_horizon):
-                yref = hstack((x_ref,u_ref))
+                yref = np.hstack((x_ref,u_ref))
                 self.acados_ocp_solver.set(j, "yref", yref)
                 x_ = self.acados_ocp_solver.get(j,"x")
                 u_ = self.acados_ocp_solver.get(j,"u")
-                cond = hstack((x_[model_states_in_idx],u_[model_inputs_in_idx]))
+                cond = np.hstack((x_[model_states_in_idx],u_[model_inputs_in_idx]))
                 if model_phi_in:
-                    cond = hstack((cond,phicurrent))
+                    cond = np.hstack((cond,phicurrent))
                 cond_vec.append(cond)
-            params = l4c_residual_model.get_params(stack(cond_vec,axis=0))
+            params = l4c_residual_model.get_params(np.stack(cond_vec,axis=0))
             for jj in range(N_horizon):
-                self.acados_ocp_solver.set(jj, "p", hstack((array([phicurrent]),params[jj])))
+                self.acados_ocp_solver.set(jj, "p", np.hstack((np.array([phicurrent]),params[jj])))
         else:
             for j in range(N_horizon):
-                yref = hstack((x_ref,u_ref))
+                yref = np.hstack((x_ref,u_ref))
                 self.acados_ocp_solver.set(j, "yref", yref)
-                self.acados_ocp_solver.set(j, "p", array([phicurrent]))
+                self.acados_ocp_solver.set(j, "p", np.array([phicurrent]))
 
         comp_time = time.process_time() - start_time
         print("* comp time = %5g seconds\n" % (comp_time))
@@ -238,7 +286,7 @@ class RLBase(Node,ABC):
     
     def ground_detector(self,x_current):
         grounded_flag = False
-        if absolute(x_current[2])<absolute(land_height):
+        if np.absolute(x_current[2])<np.absolute(land_height):
             grounded_flag = True
         return grounded_flag
 
@@ -285,6 +333,10 @@ class RLBase(Node,ABC):
         pass
     
     @abstractmethod
+    def rl_trigger(self):
+        pass
+
+    @abstractmethod
     def offboard_mode_trigger(self):
         pass
     
@@ -316,6 +368,25 @@ class RLBase(Node,ABC):
         msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
         self.offboard_control_mode_publisher_.publish(msg)
 
+    def publish_offboard_control_mode_position(self):
+        msg = OffboardControlMode()
+        msg.position = True  
+        msg.velocity = False
+        msg.acceleration = False
+        msg.attitude = False
+        msg.body_rate = False
+        msg.thrust_and_torque = False
+        msg.direct_actuator = False
+        msg.timestamp = int(Clock().now().nanoseconds / 1000)  # time in microseconds
+        self.offboard_control_mode_publisher_.publish(msg)
+
+    def publish_trajectory_setpoint(self):
+        msg = TrajectorySetpoint()
+        msg.position = [0.0,0.0,-1.5]
+        msg.yaw = 0.0 # [-PI:PI]
+        msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
+        self.trajectory_setpoint_publisher_.publish(msg)
+
     def publish_vehicle_thrust_setpoint(self,c):
         msg = VehicleThrustSetpoint()
         msg.xyz = [0.0,0.0,c]
@@ -329,7 +400,7 @@ class RLBase(Node,ABC):
 
     def publish_tilt_vel(self,tilt_vel):
         msg = TiltVel()
-        msg.value = tilt_vel
+        msg.value = float(tilt_vel)
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         self.tilt_vel_publisher_.publish(msg)
 
@@ -356,8 +427,8 @@ class RLBase(Node,ABC):
         msg.u = u.astype('float32')
         msg.uref = u_ref.astype('float32')
 
-        msg.varphi  = rad2deg(tilt_angle)
-        msg.tiltvel = rad2deg(tilt_vel)
+        msg.varphi  = np.rad2deg(tilt_angle)
+        msg.tiltvel = float(np.rad2deg(tilt_vel))
 
         msg.status = status
         msg.comptime = comptime
@@ -370,49 +441,3 @@ class RLBase(Node,ABC):
     @abstractmethod
     def publish_actuator_motors(self):
         pass
-
-
-
-    # update yref and parameters
-    # for j in range(N_horizon):
-    #     yref = hstack((x_ref,u_ref))
-    #     self.acados_ocp_solver.set(j, "yref", yref)
-        # if use_residual_model:
-        #     l4c_params = l4c_residual_model.get_params(expand_dims(xcurrent,axis=0))
-        #     self.acados_ocp_solver.set(j, "p", hstack((phicurrent,l4c_params.squeeze())))
-        # else:
-        #     self.acados_ocp_solver.set(j, "p", array([phicurrent]))
-    # yref_N = x_ref
-    # self.acados_ocp_solver.set(N_horizon, "yref", yref_N)
-    # if use_residual_model:
-    #     l4c_params = l4c_residual_model.get_params(expand_dims(xcurrent,axis=0))
-    #     self.acados_ocp_solver.set(N_horizon, "p", hstack((phicurrent,l4c_params.squeeze())))
-    # else:
-    #     self.acados_ocp_solver.set(N_horizon, "p", array([phicurrent]))
-
-    # # emergency descent
-    # self.set_emergency_xyz_trajectory = False 
-    # self.emergency_xyz_position = zeros(3,dtype='float')
-    # self.emergency_t0 = 0.0
-
-    # emergency_descent_velocity = params_.get('emergency_descent_velocity')
-
-    # if tracking_done and (not grounded_flag):
-    #     print("tracking done but not grounded")
-    #     # this means we are in the air even after the trajectory has ended
-    #     # this could happen because the trajectory finishes in the air 
-    #     # it could also happen if the tracking has gone wrong
-    #     # in both cases we need to land the vehicle
-    #     # strategy: override reference with a trajectory that tracks to the ground at the current (x,y) position
-    #     # also set u_ref to gravity compensation and tilt_vel to -1.0 (i.e. go as close as possible to drone configuration)
-    #     if not self.set_emergency_xyz_trajectory:
-    #         self.emergency_t0                 = copy(self.current_time)
-    #         self.emergency_xyz_position       = copy(self.state[:3])
-    #         self.set_emergency_xyz_trajectory = True
-    #     x_ref,u_ref = emergency_descent_time(self.current_time - self.emergency_t0,self.emergency_xyz_position)
-    #     tilt_vel = -u_max  # go to drone configuration for more controllability
-
-    #     # publish trajectory setpoint for land detector
-    #     msg = TrajectorySetpoint()
-    #     msg.velocity = [0.0,0.0,x_ref[8]]
-    #     self.trajectory_setpoint_publisher_.publish(msg)

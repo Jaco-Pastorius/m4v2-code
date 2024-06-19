@@ -15,7 +15,7 @@ def multipage(filename, figs=None, dpi=200):
         fig.savefig(pp, format='pdf')
     pp.close()
 
-from morphing_lander.mpc.mpc import create_ocp_solver_description
+from morphing_lander.mpc.mpc import create_ocp_solver_description, create_ocp_solver_description_with_int
 from morphing_lander.mpc.parameters import params_
 from morphing_lander.mpc.trajectories import traj_jump_time
 from morphing_lander.mpc.integrator import create_sim_solver_description
@@ -46,7 +46,7 @@ x_ref = np.zeros(12)
 x_ref[2] = -1.5
 u_ref = np.zeros(4)
 
-Nsim = int(7.0/Ts)
+Nsim = int(10.0/Ts)
 
 def plot_robot(
     shooting_nodes,
@@ -166,7 +166,8 @@ def plot_robot(
 def closed_loop_simulation():
 
     # create solvers
-    ocp = create_ocp_solver_description()
+    # ocp = create_ocp_solver_description()
+    ocp = create_ocp_solver_description_with_int()
     sim = create_sim_solver_description()
     acados_ocp_solver = AcadosOcpSolver(
         ocp, 
@@ -186,7 +187,7 @@ def closed_loop_simulation():
     nu = ocp.model.u.size()[0]
 
     # simulation arrays 
-    simX = np.ndarray((Nsim + 1, nx))
+    simX = np.ndarray((Nsim + 1, nx-1))
     simU = np.ndarray((Nsim,     nu))
 
     xcurrent   = X0
@@ -194,12 +195,14 @@ def closed_loop_simulation():
 
     # solver initialization
     for stage in range(N_horizon + 1):
-        acados_ocp_solver.set(stage, "x", np.zeros(12))
+        # acados_ocp_solver.set(stage, "x", np.zeros(12))
+        acados_ocp_solver.set(stage, "x", np.zeros(13))
         if use_residual_model:
             l4c_params = l4c_residual_model.get_params(np.zeros((1,model_ninputs)))
             acados_ocp_solver.set(stage, "p", np.hstack((np.array([0.0]),l4c_params.squeeze())))
         else:
-            acados_ocp_solver.set(stage, "p", np.array([0.0]))
+            # acados_ocp_solver.set(stage, "p", np.array([0.0]))
+            acados_ocp_solver.set(stage, "p", np.array([0.0,0.0]))
 
     for stage in range(N_horizon):
         acados_ocp_solver.set(stage, "u", np.zeros(4))
@@ -208,11 +211,23 @@ def closed_loop_simulation():
     t = 0.0
     phicurrent = 0.0
     phi_vec = [phicurrent]
+    eint = 0.0
+    # xcurrent = np.hstack((xcurrent,eint))
     for i in range(Nsim):
         start_time = time.process_time()
 
         # get reference
         x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(t)
+
+        # get integral state
+        ki = 2.0
+        eint += ki * Ts * (xcurrent[2]-x_ref[2])
+        print(f"eint = {eint}")
+        print(f"z = {xcurrent[2]}")
+        print(f"z_ref = {x_ref[2]}")
+
+        # get augmented state
+        xcurrent = np.hstack((xcurrent,eint))
         
         # set initial state constraint
         acados_ocp_solver.set(0, "lbx", xcurrent)
@@ -241,9 +256,13 @@ def closed_loop_simulation():
                 acados_ocp_solver.set(jj, "p", np.hstack((np.array([phicurrent]),params[jj])))
         else:
             for j in range(N_horizon):
-                yref = np.hstack((x_ref,u_ref))
+                x_ref_pad = np.hstack((x_ref,0.0))
+                # yref = np.hstack((x_ref,u_ref))
+                yref = np.hstack((x_ref_pad,u_ref))
                 acados_ocp_solver.set(j, "yref", yref)
-                acados_ocp_solver.set(j, "p", np.array([phicurrent]))
+                # acados_ocp_solver.set(j, "p", np.array([phicurrent]))
+                acados_ocp_solver.set(j, "p", np.array([phicurrent,x_ref[2]]))
+
 
         comp_time = time.process_time() - start_time
         print("* comp time = %5g seconds\n" % (comp_time))
@@ -252,7 +271,8 @@ def closed_loop_simulation():
         simU[i,:] = u_opt
 
         # simulate system
-        acados_integrator.set("x", xcurrent)
+        # acados_integrator.set("x", xcurrent)
+        acados_integrator.set("x", xcurrent[:-1])
         acados_integrator.set("u", simU[i, :])
         acados_integrator.set("p",np.array([phicurrent]))
         acados_integrator.solve()

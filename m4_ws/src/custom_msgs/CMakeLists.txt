@@ -15,6 +15,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MPCStatus.msg"
   "msg/MPCStatusOld.msg"
   "msg/TiltVel.msg"
+  "msg/DriveVel.msg"
 )
 
 ament_package()

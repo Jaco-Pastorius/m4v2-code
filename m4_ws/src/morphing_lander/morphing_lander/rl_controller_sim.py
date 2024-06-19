@@ -7,26 +7,20 @@ from rclpy.qos import qos_profile_sensor_data
 from rclpy.clock import Clock
 
 # Message imports
-from px4_msgs.msg import VehicleCommand
 from px4_msgs.msg import VehicleLocalPosition
 from px4_msgs.msg import ActuatorMotors
 from px4_msgs.msg import VehicleAngularVelocity
 from px4_msgs.msg import VehicleAttitude
-from px4_msgs.msg import ManualControlSetpoint
 
 # Morphing lander imports
-from morphing_lander.mpc.MPCBase import MPCBase
+from morphing_lander.mpc.RLBase import RLBase
 from morphing_lander.mpc.parameters import params_
 from morphing_lander.mpc.utils import euler_from_quaternion
 
 warmup_time    = params_['warmup_time']
 Ts             = params_['Ts']
-v_max_absolute = params_['v_max_absolute']
-max_dx         = params_['max_dx']
-max_dy         = params_['max_dy']
-max_dz         = params_['max_dz']
 
-class MPCSim(MPCBase): 
+class RLSim(RLBase): 
     def __init__(self):
         super().__init__()
 
@@ -52,22 +46,15 @@ class MPCSim(MPCBase):
                                             qos_profile_sensor_data)
         self.vehicle_angular_velocity_groundtruth  # prevent unused variable warning
 
-        self.manual_control_setpoint = self.create_subscription(
-                                            ManualControlSetpoint,
-                                            '/fmu/out/manual_control_setpoint',
-                                            self.manual_control_setpoint_callback,
-                                            qos_profile_sensor_data)
-        self.manual_control_setpoint  # prevent unused variable warning
-
-        # control input
-        self.input = zeros(4) # vx, vy, vz, vtilt
-
     def mpc_trigger(self):
-        mpc_flag = False
+        return True
+    
+    def rl_trigger(self):
+        rl_flag = False
         self.counter += 1
-        if (self.counter > int(warmup_time/Ts)): 
-            mpc_flag = True
-        return mpc_flag
+        if (self.counter > int(7.0/Ts)): 
+            rl_flag = True
+        return rl_flag
         
     def offboard_mode_trigger(self):
         return True
@@ -106,15 +93,13 @@ class MPCSim(MPCBase):
         self.state[10] = msg.xyz[1]
         self.state[11] = msg.xyz[2]
 
-    def manual_control_setpoint_callback(self, msg): 
-        self.input[0]  = max_dx * msg.pitch
-        self.input[1]  = max_dy * msg.roll
-        self.input[2]  = max_dz * -msg.throttle
+    def get_reference(self):
+        pass
 
 def main(args=None):
     rclpy.init(args=args)
-    print("Spinning MPCSim node \n")
-    mpc_sim = MPCSim()
+    print("Spinning RLSim node \n")
+    mpc_sim = RLSim()
     rclpy.spin(mpc_sim)
     mpc_sim.destroy_node()
     rclpy.shutdown()

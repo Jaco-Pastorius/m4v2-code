@@ -17,7 +17,7 @@ from px4_msgs.msg import ManualControlSetpoint
 # Morphing lander imports
 from morphing_lander.mpc.MPCBase import MPCBase
 from morphing_lander.mpc.parameters import params_
-from morphing_lander.mpc.utils import euler_from_quaternion
+from morphing_lander.mpc.utils import euler_from_quaternion, drive_mixer
 
 warmup_time    = params_['warmup_time']
 Ts             = params_['Ts']
@@ -96,12 +96,27 @@ class MPCSim(MPCBase):
         # publish to px4
         print(f"publishing: {u}")
         msg = ActuatorMotors()
+
+        # publish thruster actions
         msg.control[0] = u[0]
         msg.control[1] = u[1]
         msg.control[2] = u[2]
         msg.control[3] = u[3]
+
+        # publish tilt action
         msg.control[4] = self.tilt_angle/(pi/2)
         msg.control[5] = self.tilt_angle/(pi/2)
+
+        # get normalized drive actions (m4 sdf is set up for 0 to be negative velocity 0.5 to be zero and 1 to be positive velocity)
+        u_left, u_right = drive_mixer(self.drive_speed,self.turn_speed)
+        u_left_normalized = (u_left + 1.0)/2.0
+        u_right_normalized = -(u_right + 1.0)/2.0
+
+        # publish normalized drive actions
+        msg.control[6] = u_right_normalized
+        msg.control[7] = u_left_normalized
+        msg.control[8] = u_left_normalized
+        msg.control[9] = u_right_normalized
 
         timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         msg.timestamp = timestamp

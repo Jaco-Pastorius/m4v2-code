@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 
 # Numpy imports
-from numpy import zeros,array,copy,hstack,sum,absolute,rad2deg,stack
+import numpy as np
 
 # Python imports
 import os 
@@ -22,13 +22,14 @@ from px4_msgs.msg    import TiltAngle
 from px4_msgs.msg    import VehicleThrustSetpoint
 from custom_msgs.msg import MPCStatus
 from custom_msgs.msg import TiltVel
+from custom_msgs.msg import DriveVel
 
 # Acados imports
 from acados_template import AcadosOcpSolver
 
 # Morphing lander imports
-from morphing_lander.mpc.mpc import create_ocp_solver_description
-from morphing_lander.mpc.trajectories        import traj_jump_time
+from morphing_lander.mpc.mpc                 import create_ocp_solver_description, create_ocp_solver_description_with_int
+from morphing_lander.mpc.trajectories        import traj_jump_time, traj_jump_time_optimal
 from morphing_lander.mpc.parameters          import params_
 
 from IPython import embed
@@ -56,6 +57,9 @@ model_states_out_idx       = params_.get('model_states_out_idx')
 model_ninputs              = params_.get('model_ninputs')
 model_noutputs             = params_.get('model_noutputs')
 
+# integral state gain
+integral_gain              = params_.get('integral_gain')
+
 class MPCBase(Node,ABC): 
     def __init__(self):
         super().__init__('MPCBase')
@@ -69,7 +73,8 @@ class MPCBase(Node,ABC):
         self.mpc_status_publisher_   = self.create_publisher(MPCStatus, "/mpc_status", queue_size)
         self.vehicle_thrust_setpoint_publisher_   = self.create_publisher(VehicleThrustSetpoint, "/fmu/in/vehicle_thrust_setpoint", queue_size)
         self.tilt_vel_publisher_ = self.create_publisher(TiltVel, "/tilt_vel", queue_size)
-        
+        self.drive_vel_publisher_ = self.create_publisher(DriveVel, "/drive_vel", queue_size)
+
         # subscribers
         self.tilt_angle_subscriber_ = self.create_subscription(
                                     TiltAngle,
@@ -89,10 +94,15 @@ class MPCBase(Node,ABC):
         self.mpc_status = 0
 
         # robot state
-        self.state = zeros(12)
+        self.state             = np.zeros(12)
+        self.integral_state    = 0.0
 
         # tilt angle
         self.tilt_angle = 0.0
+
+        # drive speed and turn speed
+        self.drive_speed = 0.0
+        self.turn_speed  = 0.0
 
         # time variables
         self.time_initialized = False
@@ -104,7 +114,8 @@ class MPCBase(Node,ABC):
         self.counter = 0
 
         # compile acados solver (ocp)
-        ocp  = create_ocp_solver_description()
+        # ocp  = create_ocp_solver_description()
+        ocp = create_ocp_solver_description_with_int()
         self.acados_ocp_solver = AcadosOcpSolver(
             ocp, 
             json_file=os.path.join(acados_ocp_path, ocp.model.name + '_acados_ocp.json'),
@@ -114,15 +125,17 @@ class MPCBase(Node,ABC):
 
         # solver initialization
         for stage in range(N_horizon + 1):
-            self.acados_ocp_solver.set(stage, "x", zeros(12))
+            # self.acados_ocp_solver.set(stage, "x", np.zeros(12))
+            self.acados_ocp_solver.set(stage, "x", np.zeros(13))
             if use_residual_model:
-                l4c_params = l4c_residual_model.get_params(zeros((1,model_ninputs)))
-                self.acados_ocp_solver.set(stage, "p", hstack((array([0.0]),l4c_params.squeeze())))
+                l4c_params = l4c_residual_model.get_params(np.zeros((1,model_ninputs)))
+                self.acados_ocp_solver.set(stage, "p", np.hstack((np.array([0.0]),l4c_params.squeeze())))
             else:
-                self.acados_ocp_solver.set(stage, "p", array([0.0]))
+                self.acados_ocp_solver.set(stage, "p", np.array([0.0,0.0]))
+                # self.acados_ocp_solver.set(stage, "p", np.array([0.0]))
 
         for stage in range(N_horizon):
-            self.acados_ocp_solver.set(stage, "u", zeros(4))
+            self.acados_ocp_solver.set(stage, "u", np.zeros(4))
 
     # timer callback
     def timer_callback(self):
@@ -158,8 +171,8 @@ class MPCBase(Node,ABC):
             if self.time_initialized: self.advance_time()
 
             # get current state and tilt angle (self.state is updated by odometry callback)
-            x_current   = copy(self.state) 
-            phi_current = copy(self.tilt_angle) 
+            x_current   = np.copy(self.state) 
+            phi_current = np.copy(self.tilt_angle) 
 
             # update reference (make sure reference starts from ground and ends on ground)
             x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(self.current_time)
@@ -169,6 +182,9 @@ class MPCBase(Node,ABC):
             # tracking_done = False
             # x_ref,u_ref,tilt_vel = self.get_reference()
 
+            # update integral state
+            self.integral_state += Ts * integral_gain * (x_current[2]-x_ref[2])
+
             # check if robot is grounded
             grounded_flag = self.ground_detector(x_current)
 
@@ -177,17 +193,20 @@ class MPCBase(Node,ABC):
                 # this means we are on the ground and have already executed the trajectory
                 # we need to switch off the thrusters and get to drive as fast as possible (if not there already)
                 # also stop running the mpc
-                u_opt = zeros(4,dtype='float')
+                u_opt = np.zeros(4,dtype='float')
                 tilt_vel = u_max
                 mpc_flag = False      
-                self.disarm()
+                self.drive_speed = 1.0
+                self.turn_speed  = 0.0
+                # self.disarm()
 
             # run mpc
-            x_next = zeros(12)
+            x_next = np.zeros(12)
             if mpc_flag: 
-                u_opt,x_next,comp_time = self.mpc_update(x_current,phi_current,x_ref,u_ref)
+                # u_opt,x_next,comp_time = self.mpc_update(x_current,phi_current,x_ref,u_ref)
+                u_opt,x_next,comp_time = self.mpc_update_with_int(x_current,phi_current,x_ref,u_ref,self.integral_state)
             else:
-                u_opt = zeros(4,dtype='float')
+                u_opt = np.zeros(4,dtype='float')
                 comp_time = -1.0
 
             # publish control inputs
@@ -203,7 +222,7 @@ class MPCBase(Node,ABC):
             print(f"tilt_vel : {tilt_vel}")
 
             # publish thrust for landing estimator
-            self.publish_vehicle_thrust_setpoint(-sum(u_opt)/4)
+            self.publish_vehicle_thrust_setpoint(-np.sum(u_opt)/4)
 
             # publish log values
             self.publish_log(x_current,u_opt,x_ref,u_ref,self.tilt_angle,tilt_vel,self.mpc_status,comp_time,tracking_done,grounded_flag,x_next)
@@ -231,33 +250,65 @@ class MPCBase(Node,ABC):
             cond_vec = []
             print("using residual model")
             for j in range(N_horizon):
-                yref = hstack((x_ref,u_ref))
+                yref = np.hstack((x_ref,u_ref))
                 self.acados_ocp_solver.set(j, "yref", yref)
                 x_ = self.acados_ocp_solver.get(j,"x")
                 u_ = self.acados_ocp_solver.get(j,"u")
-                cond = hstack((x_[model_states_in_idx],u_[model_inputs_in_idx]))
+                cond = np.hstack((x_[model_states_in_idx],u_[model_inputs_in_idx]))
                 if model_phi_in:
-                    cond = hstack((cond,phicurrent))
+                    cond = np.hstack((cond,phicurrent))
                 if model_dt_in:
-                    cond = hstack((cond,Ts))
+                    cond = np.hstack((cond,Ts))
                 cond_vec.append(cond)
-            params = l4c_residual_model.get_params(stack(cond_vec,axis=0))
+            params = l4c_residual_model.get_params(np.stack(cond_vec,axis=0))
             for jj in range(N_horizon):
-                self.acados_ocp_solver.set(jj, "p", hstack((array([phicurrent]),params[jj])))
+                self.acados_ocp_solver.set(jj, "p", np.hstack((np.array([phicurrent]),params[jj])))
         else:
             for j in range(N_horizon):
-                yref = hstack((x_ref,u_ref))
+                yref = np.hstack((x_ref,u_ref))
                 self.acados_ocp_solver.set(j, "yref", yref)
-                self.acados_ocp_solver.set(j, "p", array([phicurrent]))
+                self.acados_ocp_solver.set(j, "p", np.array([phicurrent]))
 
         comp_time = time.process_time() - start_time
         print("* comp time = %5g seconds\n" % (comp_time))
 
         return u_opt, x_next, comp_time
     
+    def mpc_update_with_int(self,xcurrent,phicurrent,x_ref,u_ref,integral_state):
+        start_time = time.process_time()
+
+        # pad with integral state
+        xcurrent = np.hstack((xcurrent,integral_state))
+        x_ref    = np.hstack((x_ref,0.0))
+
+        # set initial state constraint
+        self.acados_ocp_solver.set(0, "lbx", xcurrent)
+        self.acados_ocp_solver.set(0, "ubx", xcurrent)
+        
+        # solve ocp
+        self.mpc_status = self.acados_ocp_solver.solve()  
+        print(f"mpc_status: {self.mpc_status}")
+
+        # get first input
+        u_opt = self.acados_ocp_solver.get(0, "u")   
+
+        # get predicted next state 
+        x_next = self.acados_ocp_solver.get(1, "x") 
+
+        # set the reference and parameters
+        for j in range(N_horizon):
+            yref = np.hstack((x_ref,u_ref))
+            self.acados_ocp_solver.set(j, "yref", yref)
+            self.acados_ocp_solver.set(j, "p", np.array([phicurrent,x_ref[2]]))
+
+        comp_time = time.process_time() - start_time
+        print("* comp time = %5g seconds\n" % (comp_time))
+
+        return u_opt, x_next[:-1], comp_time
+
     def ground_detector(self,x_current):
         grounded_flag = False
-        if absolute(x_current[2])<absolute(land_height):
+        if np.absolute(x_current[2])<np.absolute(land_height):
             grounded_flag = True
         return grounded_flag
 
@@ -352,6 +403,13 @@ class MPCBase(Node,ABC):
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         self.tilt_vel_publisher_.publish(msg)
 
+    def publish_drive_vel(self,drive_speed,turn_speed):
+        msg = DriveVel()
+        msg.drivespeed = drive_speed
+        msg.turnspeed  = turn_speed
+        msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
+        self.drive_vel_publisher_.publish(msg)
+
     def publish_vehicle_command(self, command, param1=0.0, param2=0.0):
         msg = VehicleCommand()
         msg.param1 = param1
@@ -375,8 +433,8 @@ class MPCBase(Node,ABC):
         msg.u = u.astype('float32')
         msg.uref = u_ref.astype('float32')
 
-        msg.varphi  = rad2deg(tilt_angle)
-        msg.tiltvel = rad2deg(tilt_vel)
+        msg.varphi  = np.rad2deg(tilt_angle)
+        msg.tiltvel = np.rad2deg(tilt_vel)
 
         msg.status = status
         msg.comptime = comptime
@@ -394,24 +452,24 @@ class MPCBase(Node,ABC):
 
     # update yref and parameters
     # for j in range(N_horizon):
-    #     yref = hstack((x_ref,u_ref))
+    #     yref = np.hstack((x_ref,u_ref))
     #     self.acados_ocp_solver.set(j, "yref", yref)
         # if use_residual_model:
         #     l4c_params = l4c_residual_model.get_params(expand_dims(xcurrent,axis=0))
-        #     self.acados_ocp_solver.set(j, "p", hstack((phicurrent,l4c_params.squeeze())))
+        #     self.acados_ocp_solver.set(j, "p", np.hstack((phicurrent,l4c_params.squeeze())))
         # else:
-        #     self.acados_ocp_solver.set(j, "p", array([phicurrent]))
+        #     self.acados_ocp_solver.set(j, "p", np.array([phicurrent]))
     # yref_N = x_ref
     # self.acados_ocp_solver.set(N_horizon, "yref", yref_N)
     # if use_residual_model:
     #     l4c_params = l4c_residual_model.get_params(expand_dims(xcurrent,axis=0))
-    #     self.acados_ocp_solver.set(N_horizon, "p", hstack((phicurrent,l4c_params.squeeze())))
+    #     self.acados_ocp_solver.set(N_horizon, "p", np.hstack((phicurrent,l4c_params.squeeze())))
     # else:
-    #     self.acados_ocp_solver.set(N_horizon, "p", array([phicurrent]))
+    #     self.acados_ocp_solver.set(N_horizon, "p", np.array([phicurrent]))
 
     # # emergency descent
     # self.set_emergency_xyz_trajectory = False 
-    # self.emergency_xyz_position = zeros(3,dtype='float')
+    # self.emergency_xyz_position = np.zeros(3,dtype='float')
     # self.emergency_t0 = 0.0
 
     # emergency_descent_velocity = params_.get('emergency_descent_velocity')
@@ -425,8 +483,8 @@ class MPCBase(Node,ABC):
     #     # strategy: override reference with a trajectory that tracks to the ground at the current (x,y) position
     #     # also set u_ref to gravity compensation and tilt_vel to -1.0 (i.e. go as close as possible to drone configuration)
     #     if not self.set_emergency_xyz_trajectory:
-    #         self.emergency_t0                 = copy(self.current_time)
-    #         self.emergency_xyz_position       = copy(self.state[:3])
+    #         self.emergency_t0                 = np.copy(self.current_time)
+    #         self.emergency_xyz_position       = np.copy(self.state[:3])
     #         self.set_emergency_xyz_trajectory = True
     #     x_ref,u_ref = emergency_descent_time(self.current_time - self.emergency_t0,self.emergency_xyz_position)
     #     tilt_vel = -u_max  # go to drone configuration for more controllability

@@ -66,6 +66,8 @@ params_ = {}
 # high level parameters
 params_['Ts']                    = 0.01                           # control frequency of MPC
 params_['Ts_tilt_controller']    = 0.01                           # control frequency of TiltController
+params_['Ts_drive_controller']   = 0.01                           # control frequency of DriveController
+
 params_['queue_size']            = 1                              # queue size of ros2 messages
 params_['warmup_time']           = 1.0                            # time after which mpc controller is started (seconds)
 
@@ -74,8 +76,8 @@ params_['acados_ocp_path']       = getenv("HOME") +'/m4v2-code/m4_ws/src/morphin
 params_['acados_sim_path']       = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_sims/'
 
 # generate and build flags
-params_['generate_mpc']          = True
-params_['build_mpc']             = True
+params_['generate_mpc']          = False
+params_['build_mpc']             = False
 
 # use residual model ?
 params_['use_residual_model']    = False
@@ -98,19 +100,6 @@ params_['l4c_residual_model']    = RealTimeL4CasADi(load_trained_cvae(params_.ge
                                                                       params_.get('model_noutputs')), 
                                                     approximation_order=1,
                                                     device=params_.get('device'))
-# params_['l4c_residual_model']    = RealTimeL4CasADi(CVAEZero(output_dim=params_.get('model_noutputs'),
-#                                                              latent_dim=2,
-#                                                              cond_dim=params_.get('model_ninputs'),
-#                                                              encoder_layers=[32,32],
-#                                                              decoder_layers=[32,32],
-#                                                              prior_layers=[32,32]), 
-#                                                     approximation_order=2,
-#                                                     device=params_.get('device'))
-# params_['l4c_residual_model']    = RealTimeL4CasADi(MLPZero(input_dim=params_.get('model_ninputs'),
-#                                                             output_dim=params_.get('model_noutputs'),
-#                                                             hidden_dims=[512,512]),
-#                                                     approximation_order=2,
-#                                                     device=params_.get('device'))
 
 # gazebo real time factor
 params_['real_time_factor']      = 1.0
@@ -126,12 +115,11 @@ params_['max']                   = 1934
 params_['dead']                  = 1514
 
 # safety parameters
-params_['max_tilt_in_flight']    = deg2rad(50)
+params_['max_tilt_in_flight']    = deg2rad(60)
 params_['max_tilt_on_land']      = deg2rad(85)
 
 # ground detector parameters
-# params_['land_height'] = -0.40                        # height at which we consider robot landed
-params_['land_height'] = 0.0                            # height at which we consider robot landed
+params_['land_height'] = -0.10                        # height at which we consider robot landed
 
 # emergency parameters
 params_['emergency_descent_velocity'] = 0.3             # emergency descent velocity if in strange scenario
@@ -139,6 +127,13 @@ params_['emergency_descent_velocity'] = 0.3             # emergency descent velo
 # mpc parameters
 params_['N_horizon']  = 10
 params_['T_horizon']  = 1.0
+
+# kinematic driving parameters
+params_['wheel_base']                 = 0.15      # half the distance between the wheels
+params_['wheel_radius']               = 0.12      # the wheel radius 
+params_['max_wheel_angular_velocity'] = 10.0      # rad/s
+params_['max_drive_speed']            = params_.get('wheel_radius') * params_.get('max_wheel_angular_velocity')  # m/s
+params_['max_turn_speed']             = params_.get('wheel_radius') * params_.get('max_wheel_angular_velocity') / params_.get('wheel_base')   # rad/s
 
 # dynamics parameters (use z-down parameters from excel sheet even though urdf uses z-up parameters)
 params_['g']                = 9.81                                                                   # gravitational acceleration
@@ -178,36 +173,29 @@ params_['u_max']            = 1.0
 params_['v_max_absolute']   = (pi/2)/4
 params_['T_max']            = 4*params_['kT']
 
-# cost function parameters
-params_['w_x']   = 10.0
-params_['w_y']   = 10.0
-params_['w_z']   = 10.0
-params_['w_dx']  = 1.0
-params_['w_dy']  = 1.0
-params_['w_dz']  = 1.0
-params_['w_phi'] = 0.1
-params_['w_th']  = 0.1
-params_['w_psi'] = 0.1
-params_['w_ox']  = 1.5
-params_['w_oy']  = 1.5
-params_['w_oz']  = 1.5
-params_['w_u']   = 1.0
+# integral state feedback term
+params_['integral_gain'] = 2.0
 
-params_['rho'] = 0.1
+# cost function parameters
+params_['w_x']        = 10.0
+params_['w_y']        = 10.0
+params_['w_z']        = 10.0
+params_['w_dx']       = 1.0
+params_['w_dy']       = 1.0
+params_['w_dz']       = 1.0
+params_['w_phi']      = 0.1
+params_['w_th']       = 0.1
+params_['w_psi']      = 0.1
+params_['w_ox']       = 1.5
+params_['w_oy']       = 1.5
+params_['w_oz']       = 1.5
+params_['w_u']        = 1.0
+params_['w_int']      = 50.0
+
+params_['rho']   = 0.1
 params_['gamma'] = 1.0
 
 # cost function
 params_['Q_mat'] = diag([params_['w_x'],params_['w_y'],params_['w_z'],params_['w_psi'],params_['w_th'],params_['w_phi'],params_['w_dx'],params_['w_dy'],params_['w_dz'],params_['w_ox'],params_['w_oy'],params_['w_oz']])
 params_['R_mat'] = params_['rho'] * diag([params_['w_u'],params_['w_u'],params_['w_u'],params_['w_u']])
 params_['Q_mat_terminal'] = params_['gamma'] * params_['Q_mat']
-
-# lqr terminal cost
-
-# from control import lqr, ctrb
-
-# phi = 0.0
-# Ac = A(X_ref,U_ref/cos(phi),phi)
-# Bc = B(X_ref,U_ref/cos(phi),phi)
-# K,P,_ = lqr(Ac,Bc,Q_mat,R_mat)
-
-# Q_mat_terminal = gamma * P 

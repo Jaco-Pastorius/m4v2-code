@@ -50,6 +50,9 @@ r_AR1_x        = params_.get('r_AR1_x')
 r_AR1_y        = params_.get('r_AR1_y')
 r_AR1_z        = params_.get('r_AR1_z')
 
+# integrator
+integral_gain  = params_.get('integral_gain')
+
 # individual terms of robot dynamics equation
 def M_func():
     x   = SX.sym('x',12)
@@ -311,6 +314,49 @@ def dynamics_phi_func():
 
     return Function('dynamics_phi_func',[X,U],[f_expl])
 
+def dynamics_with_int_action_func():
+    # get symbolic variables
+    X      = MX.sym('X',13,1)
+    U      = MX.sym('U',4,1)
+    varphi = MX.sym('varphi',1,1)
+    z_ref  = MX.sym('z_ref',1,1)
+
+    # get state variables
+    x_B      = X[0]
+    y_B      = X[1]
+    z_B      = X[2]
+    theta_Bz = X[3]
+    theta_By = X[4]
+    theta_Bx = X[5]
+    dx_B     = X[6]
+    dy_B     = X[7]
+    dz_B     = X[8]
+    omega_Bx = X[9]
+    omega_By = X[10]
+    omega_Bz = X[11]
+    xi       = X[12]
+
+    # q, u
+    q = vertcat(x_B,y_B,z_B,theta_Bz,theta_By,theta_Bx)
+    u = vertcat(dx_B,dy_B,dz_B,omega_Bx,omega_By,omega_Bz)
+
+    # get dynamics matrices
+    M_x = M_func()(X[:-1],varphi)
+    b_x = b_func()(X[:-1],varphi)
+    g_x = g_func()(X[:-1],varphi)  
+    S_x = S_func()(X[:-1],varphi)
+
+    # compute inverse mass matrix
+    Minv = inv(M_x)
+    du = Minv @ (S_x.T @ U - b_x - g_x)
+
+    chid = F_func()(theta_Bx,theta_By,theta_Bz) @ vertcat(omega_Bx,omega_By,omega_Bz)
+
+    # finally write explicit dynamics
+    f_expl = vertcat(u[0],u[1],u[2],chid,du,integral_gain*(z_B-z_ref))
+    
+    return Function('dynamics_with_int_action_func',[X,U,varphi,z_ref],[f_expl])
+
 # special functions
 def f():
     X = MX.sym("X",12)
@@ -417,6 +463,23 @@ def rk4_with_ground_effect():
 
     func = Function('rk4_with_ground_effect', [DT, X, U, Varphi], [x_next])
     return func    
+
+def rk4_with_int_action():
+    DT = MX.sym("DT", 1)
+    X = MX.sym("X",13)
+    U = MX.sym("U",4)    
+    Varphi = MX.sym("Varphi",1)
+    z_ref  = MX.sym('z_ref',1,1)
+
+    # Fixed step Runge-Kutta 4 integrator
+    k1 = dynamics_with_int_action_func()(X, U, Varphi, z_ref)
+    k2 = dynamics_with_int_action_func()(X + DT / 2 * k1, U, Varphi, z_ref)
+    k3 = dynamics_with_int_action_func()(X + DT / 2 * k2, U, Varphi, z_ref)
+    k4 = dynamics_with_int_action_func()(X + DT * k3, U, Varphi, z_ref)
+    x_next = X + DT / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+    func = Function('rk4', [DT, X, U, Varphi, z_ref], [x_next])
+    return func
 
 def A_func(x,u,varphi):
     X = MX.sym("X",12)
@@ -565,6 +628,31 @@ def export_robot_model_ground_effect() -> AcadosModel:
     model.name = model_name
 
     return model
+
+def export_discrete_robot_model_with_int_action(DT) -> AcadosModel:
+    model_name = "morphing_lander"
+
+    # tilt angle
+    varphi = MX.sym("varphi",1)
+    z_ref  = MX.sym("z_ref", 1)
+    p = vertcat(varphi,z_ref)
+
+    # states and controls
+    X = MX.sym("X",13)
+    U = MX.sym("U",4)
+
+    # get discrete nominal dynamics
+    F = rk4_with_int_action()(DT,X,U,varphi,z_ref)
+
+    model = AcadosModel()
+    model.name = model_name
+    model.x = X
+    model.u = U
+    model.p = p
+    model.disc_dyn_expr = F
+
+    return model
+
 
 def export_robot_model_phi() -> AcadosModel:
     model_name = "morphing_lander"

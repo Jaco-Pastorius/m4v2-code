@@ -35,6 +35,28 @@ def spatial_tracking(X,traj):
     X_ref = X_im + gamma*(X_i - X_im)
     return X_ref
 
+def traj_fly_up(t):
+    done = False
+    H = -1.5
+    v_up = -0.5
+    z0 = 0.0
+
+    t1 = H/v_up
+    
+    if (t<t1): 
+        z, dz    = z0 + v_up*t, v_up
+    else:
+        z,dz = z0 + H, 0.0
+        done = True
+
+    x_ref = np.zeros(12)
+    x_ref[2] = z
+    x_ref[8] = dz
+    u_ref = m*g/T_max*np.ones(4)
+    tilt_vel = 0.0
+    return x_ref,u_ref,tilt_vel, done
+
+
 def traj_jump_time_optimal(t):
 
     done = False
@@ -82,7 +104,6 @@ def traj_jump_time_optimal(t):
 
     return x_ref,u_ref,tilt_vel, done
 
-
 def traj_jump_time(t):
 
     done = False
@@ -93,12 +114,13 @@ def traj_jump_time(t):
     zf = 0.0
 
     H = -1.5          # 1.5 m 
+    H_down = H - zf
     v_up = -0.5
-    v_down = 0.50     # try 0.50 m/s
+    v_down = 0.30     # try 0.50 m/s
     v_forward = 0.0   # 0.0
 
     t1 = H/v_up
-    t2 = t1 - H/v_down
+    t2 = t1 - H_down/v_down
     t_tilt = t1 - 0.5 * H/v_down
     
     phi_max = np.deg2rad(50)
@@ -128,7 +150,8 @@ def traj_jump_time(t):
     x_ref[6] = dx
     x_ref[8] = dz
 
-    u_ref = m*g/T_max*np.ones(4)
+    # u_ref = m*g/T_max*np.ones(4)
+    u_ref = 0.0*np.ones(4)
     return x_ref,u_ref,tilt_vel, done
 
 def traj_descent_time(t):
