@@ -29,7 +29,7 @@ from acados_template import AcadosOcpSolver
 
 # Morphing lander imports
 from morphing_lander.mpc.mpc                 import create_ocp_solver_description, create_ocp_solver_description_with_int
-from morphing_lander.mpc.trajectories        import traj_jump_time, traj_jump_time_optimal
+from morphing_lander.mpc.trajectories        import traj_jump_time
 from morphing_lander.mpc.parameters          import params_
 
 from IPython import embed
@@ -40,6 +40,7 @@ N_horizon                  = params_.get('N_horizon')
 Ts                         = params_.get('Ts')
 u_max                      = params_.get('u_max')
 land_height                = params_.get('land_height')
+takeoff_height             = params_.get('takeoff_height')
 max_tilt_in_flight         = params_.get('max_tilt_in_flight')
 max_tilt_on_land           = params_.get('max_tilt_on_land')
 acados_ocp_path            = params_.get('acados_ocp_path')
@@ -92,6 +93,10 @@ class MPCBase(Node,ABC):
 
         # mpc flag
         self.mpc_status = 0
+
+        # takeoff flag
+        self.takeoff_flag = False
+        self.mission_done = False
 
         # robot state
         self.state             = np.zeros(12)
@@ -176,7 +181,6 @@ class MPCBase(Node,ABC):
 
             # update reference (make sure reference starts from ground and ends on ground)
             x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(self.current_time)
-            # x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time_optimal(self.current_time)
 
             # # update reference based on joystick/RC commands
             # tracking_done = False
@@ -185,19 +189,23 @@ class MPCBase(Node,ABC):
             # update integral state
             self.integral_state += Ts * integral_gain * (x_current[2]-x_ref[2])
 
+            # check if robot has taken off
+            self.takeoff_detector(x_current)
+
             # check if robot is grounded
             grounded_flag = self.ground_detector(x_current)
 
-            if tracking_done and grounded_flag:
-                print("tracking done and grounded")
-                # this means we are on the ground and have already executed the trajectory
+            # check if mission has finished
+            self.mission_done_detector(grounded_flag)
+
+            if self.mission_done:
+                print("mission is done")
+                # this means we are on the ground after having taken off
                 # we need to switch off the thrusters and get to drive as fast as possible (if not there already)
                 # also stop running the mpc
                 u_opt = np.zeros(4,dtype='float')
                 tilt_vel = u_max
                 mpc_flag = False      
-                self.drive_speed = 1.0
-                self.turn_speed  = 0.0
                 # self.disarm()
 
             # run mpc
@@ -213,7 +221,7 @@ class MPCBase(Node,ABC):
             self.publish_actuator_motors(u_opt)
 
             # limit tilt velocity to ensure safety
-            tilt_vel = self.limit_tilt_vel(tilt_vel,grounded_flag)
+            tilt_vel = self.limit_tilt_vel(tilt_vel,self.mission_done)
 
             # publish tilt velocity
             self.publish_tilt_vel(tilt_vel)
@@ -312,6 +320,14 @@ class MPCBase(Node,ABC):
             grounded_flag = True
         return grounded_flag
 
+    def takeoff_detector(self,x_current):
+        if np.absolute(x_current[2])>np.absolute(takeoff_height):
+            self.takeoff_flag = True
+
+    def mission_done_detector(self,grounded_flag):
+        if self.takeoff_flag and grounded_flag:
+            self.mission_done = True
+
     def initialize_time(self):
         self.initial_time = Clock().now().nanoseconds/1e9
         self.previous_time = self.initial_time
@@ -324,8 +340,8 @@ class MPCBase(Node,ABC):
             self.dt = self.current_time - self.previous_time
             self.previous_time = self.current_time
 
-    def limit_tilt_vel(self,tilt_vel,grounded_flag):
-        if not grounded_flag: 
+    def limit_tilt_vel(self,tilt_vel,mission_done_flag):
+        if not mission_done_flag: 
             if (self.tilt_angle >= max_tilt_in_flight and tilt_vel > 0.0):
                 tilt_vel = 0.0
         else:

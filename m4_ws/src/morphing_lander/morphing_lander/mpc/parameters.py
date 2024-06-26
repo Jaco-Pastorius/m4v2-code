@@ -1,64 +1,65 @@
 from os import getenv
 from numpy import pi,diag,deg2rad
 from pathlib import Path
-from l4casadi.realtime import RealTimeL4CasADi  
 
-import torch, yaml, os
-from morphing_lander.cvae.train import TrainConfigCVAE, TrainConfigMLP
-from morphing_lander.cvae.models import CVAE, MLP, MLPZero, CVAEZero
+# learning imports
+# from l4casadi.realtime import RealTimeL4CasADi  
+# import torch, yaml, os
+# from morphing_lander.cvae.train import TrainConfigCVAE, TrainConfigMLP
+# from morphing_lander.cvae.models import CVAE, MLP, MLPZero, CVAEZero
 
-def load_trained_cvae(model_path,ninputs,noutputs):
-    if model_path is None:
-        model = CVAE(
-            output_dim=noutputs,
-            latent_dim=2,
-            cond_dim=ninputs,
-            encoder_layers=[32,32],
-            decoder_layers=[32,32],
-            prior_layers=[32,32],
-        )
-        model.to('cuda')
-    else:
-        # Load the config from file
-        model_path = Path(model_path)
-        config_file = model_path / "config.yaml"
-        with open(config_file, "r") as f:
-            config_dict = yaml.safe_load(f)
-            config = TrainConfigCVAE(**config_dict)
+# def load_trained_cvae(model_path,ninputs,noutputs):
+#     if model_path is None:
+#         model = CVAE(
+#             output_dim=noutputs,
+#             latent_dim=2,
+#             cond_dim=ninputs,
+#             encoder_layers=[32,32],
+#             decoder_layers=[32,32],
+#             prior_layers=[32,32],
+#         )
+#         model.to('cuda')
+#     else:
+#         # Load the config from file
+#         model_path = Path(model_path)
+#         config_file = model_path / "config.yaml"
+#         with open(config_file, "r") as f:
+#             config_dict = yaml.safe_load(f)
+#             config = TrainConfigCVAE(**config_dict)
 
-        # Load the latest checkpoint (of all .pth files under model_path)
-        model_file = max(model_path.glob("*.pth"), key=os.path.getctime)
-        model = CVAE(
-            output_dim=config.output_dim,
-            latent_dim=config.latent_dim,
-            cond_dim=config.cond_dim,
-            encoder_layers=config.encoder_layers,
-            decoder_layers=config.decoder_layers,
-            prior_layers=config.prior_layers,
-        )
-        model.load_state_dict(torch.load(model_file))
-        model.to(config.device)
-    model.eval()
-    return model
+#         # Load the latest checkpoint (of all .pth files under model_path)
+#         model_file = max(model_path.glob("*.pth"), key=os.path.getctime)
+#         model = CVAE(
+#             output_dim=config.output_dim,
+#             latent_dim=config.latent_dim,
+#             cond_dim=config.cond_dim,
+#             encoder_layers=config.encoder_layers,
+#             decoder_layers=config.decoder_layers,
+#             prior_layers=config.prior_layers,
+#         )
+#         model.load_state_dict(torch.load(model_file))
+#         model.to(config.device)
+#     model.eval()
+#     return model
 
-def load_trained_mlp(model_path):
-    # Load the config from file
-    config_file = model_path / "config.yaml"
-    with open(config_file, "r") as f:
-        config_dict = yaml.safe_load(f)
-        config = TrainConfigMLP(**config_dict)
+# def load_trained_mlp(model_path):
+#     # Load the config from file
+#     config_file = model_path / "config.yaml"
+#     with open(config_file, "r") as f:
+#         config_dict = yaml.safe_load(f)
+#         config = TrainConfigMLP(**config_dict)
 
-    # Load the latest checkpoint (of all .pth files under model_path)
-    model_file = max(model_path.glob("*.pth"), key=os.path.getctime)
-    model = MLP(
-        input_dim=config.input_dim,
-        output_dim=config.output_dim,
-        hidden_dims=config.hidden_layers,
-    )
-    model.load_state_dict(torch.load(model_file))
-    model.to(config.device)
-    model.eval()
-    return model
+#     # Load the latest checkpoint (of all .pth files under model_path)
+#     model_file = max(model_path.glob("*.pth"), key=os.path.getctime)
+#     model = MLP(
+#         input_dim=config.input_dim,
+#         output_dim=config.output_dim,
+#         hidden_dims=config.hidden_layers,
+#     )
+#     model.load_state_dict(torch.load(model_file))
+#     model.to(config.device)
+#     model.eval()
+#     return model
 
 # declare parameter dictionary
 params_ = {}
@@ -76,8 +77,8 @@ params_['acados_ocp_path']       = getenv("HOME") +'/m4v2-code/m4_ws/src/morphin
 params_['acados_sim_path']       = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_sims/'
 
 # generate and build flags
-params_['generate_mpc']          = False
-params_['build_mpc']             = False
+params_['generate_mpc']          = True
+params_['build_mpc']             = True
 
 # use residual model ?
 params_['use_residual_model']    = False
@@ -95,11 +96,12 @@ params_['model_noutputs']        = len(params_.get('model_states_out_idx'))
 params_['device']                = 'cuda'
 
 params_['learned_model_path']    = None
-params_['l4c_residual_model']    = RealTimeL4CasADi(load_trained_cvae(params_.get('learned_model_path'),
-                                                                      params_.get('model_ninputs'),
-                                                                      params_.get('model_noutputs')), 
-                                                    approximation_order=1,
-                                                    device=params_.get('device'))
+params_['l4c_residual_model']    = None
+# params_['l4c_residual_model']    = RealTimeL4CasADi(load_trained_cvae(params_.get('learned_model_path'),
+#                                                                       params_.get('model_ninputs'),
+#                                                                       params_.get('model_noutputs')), 
+#                                                     approximation_order=1,
+#                                                     device=params_.get('device'))
 
 # gazebo real time factor
 params_['real_time_factor']      = 1.0
@@ -115,14 +117,15 @@ params_['max']                   = 1934
 params_['dead']                  = 1514
 
 # safety parameters
-params_['max_tilt_in_flight']    = deg2rad(60)
+params_['max_tilt_in_flight']    = deg2rad(50)
 params_['max_tilt_on_land']      = deg2rad(85)
 
 # ground detector parameters
-params_['land_height'] = -0.10                        # height at which we consider robot landed
+params_['land_height']    = -0.10                     # height at which we consider robot landed
+params_['takeoff_height'] = -0.50                     # height at which we consider robot in flight
 
 # emergency parameters
-params_['emergency_descent_velocity'] = 0.3             # emergency descent velocity if in strange scenario
+params_['emergency_descent_velocity'] = 0.3           # emergency descent velocity if in strange scenario
 
 # mpc parameters
 params_['N_horizon']  = 10
@@ -174,7 +177,7 @@ params_['v_max_absolute']   = (pi/2)/4
 params_['T_max']            = 4*params_['kT']
 
 # integral state feedback term
-params_['integral_gain'] = 2.0
+params_['integral_gain'] = 1.0
 
 # cost function parameters
 params_['w_x']        = 10.0
@@ -190,12 +193,12 @@ params_['w_ox']       = 1.5
 params_['w_oy']       = 1.5
 params_['w_oz']       = 1.5
 params_['w_u']        = 1.0
-params_['w_int']      = 50.0
+params_['w_int']      = 20.0
 
 params_['rho']   = 0.1
 params_['gamma'] = 1.0
 
 # cost function
-params_['Q_mat'] = diag([params_['w_x'],params_['w_y'],params_['w_z'],params_['w_psi'],params_['w_th'],params_['w_phi'],params_['w_dx'],params_['w_dy'],params_['w_dz'],params_['w_ox'],params_['w_oy'],params_['w_oz']])
-params_['R_mat'] = params_['rho'] * diag([params_['w_u'],params_['w_u'],params_['w_u'],params_['w_u']])
+params_['Q_mat']          = diag([params_['w_x'],params_['w_y'],params_['w_z'],params_['w_psi'],params_['w_th'],params_['w_phi'],params_['w_dx'],params_['w_dy'],params_['w_dz'],params_['w_ox'],params_['w_oy'],params_['w_oz']])
+params_['R_mat']          = params_['rho'] * diag([params_['w_u'],params_['w_u'],params_['w_u'],params_['w_u']])
 params_['Q_mat_terminal'] = params_['gamma'] * params_['Q_mat']

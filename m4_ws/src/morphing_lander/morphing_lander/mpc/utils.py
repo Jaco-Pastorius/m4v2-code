@@ -77,7 +77,7 @@ class ONNXModel:
         # obs type should be  :  <class 'numpy.ndarray'>
         pos_transformed        = np.array([x_current[0], x_current[1],-x_current[2]])
         # quat                   = R.from_euler('zyx', [x_current[3],x_current[4],x_current[5]]).as_quat()
-        quat = quaternion_from_euler(x_current[5],x_current[4],x_current[3])
+        quat                   = quaternion_from_euler(x_current[5],x_current[4],x_current[3])
         quat_transformed       = np.array([quat[1],quat[2],-quat[3],quat[0]])
         vel_transformed        = np.array([x_current[6],x_current[7],-x_current[8]])
         rotvel_transformed     = np.array([x_current[9],x_current[10],x_current[11]])

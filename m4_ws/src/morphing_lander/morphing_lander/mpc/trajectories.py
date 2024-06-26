@@ -10,14 +10,13 @@ T_max                      = params_.get('T_max')
 u_max                      = params_.get('u_max')
 emergency_descent_velocity = params_.get('emergency_descent_velocity')
 
-# Create interpolators
-x_opt_vec = np.load('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/optimal_trajectory/x_vec.npy')
-u_opt_vec = np.load('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/optimal_trajectory/u_vec.npy')
-t_opt_vec = np.load('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/optimal_trajectory/t_vec.npy')
-N_opt_horizon = np.load('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/optimal_trajectory/N_horizon.npy')
-T_opt_horizon = np.load('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/optimal_trajectory/T_horizon.npy')
-
-x_interpolator, u_interpolator = create_interpolators(t_opt_vec, x_opt_vec, u_opt_vec)
+# # Create interpolators
+# x_opt_vec = np.load('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/optimal_trajectory/x_vec.npy')
+# u_opt_vec = np.load('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/optimal_trajectory/u_vec.npy')
+# t_opt_vec = np.load('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/optimal_trajectory/t_vec.npy')
+# N_opt_horizon = np.load('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/optimal_trajectory/N_horizon.npy')
+# T_opt_horizon = np.load('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/optimal_trajectory/T_horizon.npy')
+# x_interpolator, u_interpolator = create_interpolators(t_opt_vec, x_opt_vec, u_opt_vec)
 
 def spatial_tracking(X,traj):
     p = X[:3]
@@ -56,53 +55,52 @@ def traj_fly_up(t):
     tilt_vel = 0.0
     return x_ref,u_ref,tilt_vel, done
 
+# def traj_jump_time_optimal(t):
 
-def traj_jump_time_optimal(t):
+#     done = False
 
-    done = False
+#     z0 = 0.0
+#     zf = 0.0
 
-    z0 = 0.0
-    zf = 0.0
+#     H = -1.5
+#     v_up = -0.5
 
-    H = -1.5
-    v_up = -0.5
-
-    t1 = H/v_up
-    t2 = t1 + T_opt_horizon
+#     t1 = H/v_up
+#     t2 = t1 + T_opt_horizon
     
 
-    x_ref = np.zeros(12)
-    u_ref = m*g/T_max*np.ones(4)
+#     x_ref = np.zeros(12)
+#     u_ref = m*g/T_max*np.ones(4)
 
-    if (t<t1): 
-        # ascend in a linear trajectory
-        z, dz    = z0 + v_up*t, v_up
+#     if (t<t1): 
+#         # ascend in a linear trajectory
+#         z, dz    = z0 + v_up*t, v_up
 
-        # write references
-        x_ref[2] = z
-        x_ref[8] = dz
-        tilt_vel = 0.0
+#         # write references
+#         x_ref[2] = z
+#         x_ref[8] = dz
+#         tilt_vel = 0.0
 
-    elif ((t>t1) and (t<t2)):
-        # get reference values from optimal trajectory
-        x_ref_temp, u_ref_temp = interpolate_values(x_interpolator, u_interpolator, t-t1)
+#     elif ((t>t1) and (t<t2)):
+#         # get reference values from optimal trajectory
+#         x_ref_temp, u_ref_temp = interpolate_values(x_interpolator, u_interpolator, t-t1)
 
-        # interpolate reference values
-        x_ref, u_ref = x_ref_temp[:-1], u_ref_temp[:-1]
-        tilt_vel = u_ref_temp[-1]
+#         # interpolate reference values
+#         x_ref, u_ref = x_ref_temp[:-1], u_ref_temp[:-1]
+#         tilt_vel = u_ref_temp[-1]
 
-    elif (t>t2):
-        z,dz = zf,0.0
+#     elif (t>t2):
+#         z,dz = zf,0.0
 
-        # write references
-        x_ref[2] = z
-        x_ref[8] = dz
-        tilt_vel = 0.0
+#         # write references
+#         x_ref[2] = z
+#         x_ref[8] = dz
+#         tilt_vel = 0.0
 
-        # trajectory done
-        done = True
+#         # trajectory done
+#         done = True
 
-    return x_ref,u_ref,tilt_vel, done
+#     return x_ref,u_ref,tilt_vel, done
 
 def traj_jump_time(t):
 
@@ -113,34 +111,34 @@ def traj_jump_time(t):
     z0 = 0.0
     zf = 0.0
 
-    H = -1.5          # 1.5 m 
-    H_down = H - zf
-    v_up = -0.5
-    v_down = 0.30     # try 0.50 m/s
-    v_forward = 0.0   # 0.0
+    H         = -1.5          # 1.5 m 
+    H_down    =  H - zf
+    v_up      = -0.50
+    v_down    =  0.30 
+    v_forward =  0.0          # 0.0
 
     t1 = H/v_up
-    t2 = t1 - H_down/v_down
-    t_tilt = t1 - 0.5 * H/v_down
+    t2 = t1 + 5.0
+    t3 = t2 + (-H_down/v_down)
+    t_tilt = 0.5*t2 + 0.5*t3
     
-    phi_max = np.deg2rad(50)
-
     if (t<t1): 
         x, dx    = 0.0, 0.0
         z, dz    = z0 + v_up*t, v_up
-        phi,dphi = 0.0,0.0
         tilt_vel = 0.0
     elif ((t>t1) and (t<t2)):
-        x, dx    = v_forward*(t-t1), v_forward
-        z,dz = z0 + H + v_down * (t-t1), v_down
-        phi,dphi = phi_max*(t-t1)/(t2-t1), phi_max/(t2-t1)
-        tilt_vel = 1.0
-        # if t>t_tilt:
-        #     tilt_vel = 1.0
-    elif (t>t2):
-        x,dx = v_forward*(t2-t1),0.0
+        x, dx    = 0.0, 0.0
+        z, dz    = z0 + H, 0.0
+        tilt_vel = 0.0
+    elif ((t>t2) and (t<t3)):
+        x, dx    = v_forward*(t-t2), v_forward
+        z,dz = z0 + H + v_down * (t-t2), v_down
+        tilt_vel = 0.0
+        if t>t_tilt:
+            tilt_vel = 1.0
+    elif (t>t3):
+        x,dx = v_forward*(t3-t2),0.0
         z,dz = zf,0.0
-        phi,dphi = phi_max,phi_max/(t2-t1)
         tilt_vel = 1.0
         done = True
 
@@ -150,8 +148,7 @@ def traj_jump_time(t):
     x_ref[6] = dx
     x_ref[8] = dz
 
-    # u_ref = m*g/T_max*np.ones(4)
-    u_ref = 0.0*np.ones(4)
+    u_ref = m*g/T_max*np.ones(4)
     return x_ref,u_ref,tilt_vel, done
 
 def traj_descent_time(t):
