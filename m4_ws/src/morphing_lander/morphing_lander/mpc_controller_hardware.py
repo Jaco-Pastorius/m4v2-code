@@ -50,6 +50,9 @@ class MPCHardware(MPCBase):
         
     def offboard_mode_trigger(self):
         return self.offboard_switch
+    
+    def get_reference(self):
+        pass
 
     def vehicle_odometry_callback(self, msg): 
         # get state from odometry
