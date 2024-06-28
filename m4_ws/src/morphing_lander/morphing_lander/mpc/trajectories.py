@@ -17,7 +17,7 @@ land_height                = params_.get('land_height')
 gravity = [0,0,9.81]
 
 # Define the trajectory starting state:
-pos0 = [0, 0, 0] #position
+pos0 = [0, 0, -0.11] #position
 vel0 = [0, 0, 0] #velocity
 acc0 = [0, 0, 0] #acceleration
 
@@ -27,7 +27,7 @@ vel1 = [0, 0, 0]  # velocity
 acc1 = [0, 0, 0]  # acceleration
 
 # Define the third state
-pos2 = [3, 0, land_height]  # position
+pos2 = [3, 0, -0.21]  # position
 vel2 = [2.0, 0, 0.0]  # velocity
 acc2 = [0, 0, 0]  # acceleration
 
