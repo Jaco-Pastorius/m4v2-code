@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.interpolate import interp1d
-import onnxruntime as ort
+# import onnxruntime as ort
 from scipy.spatial.transform import Rotation as R
 from IPython import embed
 
@@ -68,42 +68,42 @@ def theta_fit(varphi):
     # theta as a function of varphi fit from matlab kinematics script
     return -0.5988*varphi**4 + 1.55*varphi**3 - 1.69*varphi**2 + 0.3304*varphi + 1.439
 
-class ONNXModel:
-   def __init__(self, model_path):
-       self.model = ort.InferenceSession(model_path)
+# class ONNXModel:
+#    def __init__(self, model_path):
+#        self.model = ort.InferenceSession(model_path)
 
-   def preprocess_obs(self,x_current,phi_current, previous_input_rl):
-        # obs shape should be :  (1, 19)
-        # obs type should be  :  <class 'numpy.ndarray'>
-        pos_transformed        = np.array([x_current[0], x_current[1],-x_current[2]])
-        # quat                   = R.from_euler('zyx', [x_current[3],x_current[4],x_current[5]]).as_quat()
-        quat                   = quaternion_from_euler(x_current[5],x_current[4],x_current[3])
-        quat_transformed       = np.array([quat[1],quat[2],-quat[3],quat[0]])
-        vel_transformed        = np.array([x_current[6],x_current[7],-x_current[8]])
-        rotvel_transformed     = np.array([x_current[9],x_current[10],x_current[11]])
-        x_current_transformed  = np.hstack((pos_transformed,quat_transformed,vel_transformed,rotvel_transformed))
-        obs = np.hstack((x_current_transformed, np.array([phi_current])/(np.pi/2), previous_input_rl))
-        obs = obs[np.newaxis,:]
-        # print obs
-        print(f"obs :  {obs}")
-        return obs.astype(np.float32)
+#    def preprocess_obs(self,x_current,phi_current, previous_input_rl):
+#         # obs shape should be :  (1, 19)
+#         # obs type should be  :  <class 'numpy.ndarray'>
+#         pos_transformed        = np.array([x_current[0], x_current[1],-x_current[2]])
+#         # quat                   = R.from_euler('zyx', [x_current[3],x_current[4],x_current[5]]).as_quat()
+#         quat                   = quaternion_from_euler(x_current[5],x_current[4],x_current[3])
+#         quat_transformed       = np.array([quat[1],quat[2],-quat[3],quat[0]])
+#         vel_transformed        = np.array([x_current[6],x_current[7],-x_current[8]])
+#         rotvel_transformed     = np.array([x_current[9],x_current[10],x_current[11]])
+#         x_current_transformed  = np.hstack((pos_transformed,quat_transformed,vel_transformed,rotvel_transformed))
+#         obs = np.hstack((x_current_transformed, np.array([phi_current])/(np.pi/2), previous_input_rl))
+#         obs = obs[np.newaxis,:]
+#         # print obs
+#         print(f"obs :  {obs}")
+#         return obs.astype(np.float32)
     
-   def predict(self, obs):
-       outputs = self.model.run(
-           None,
-           {"obs": obs},
-       )
-       return outputs
+#    def predict(self, obs):
+#        outputs = self.model.run(
+#            None,
+#            {"obs": obs},
+#        )
+#        return outputs
    
-   def postprocess_actions(self, outputs):
-       outputs[0][0][0] = np.clip(outputs[0][0][0], -1, 1)
-       outputs[0][0][1] = np.clip(outputs[0][0][1], -1, 1)
-       outputs[0][0][2] = np.clip(outputs[0][0][2], -1, 1)
-       outputs[0][0][3] = np.clip(outputs[0][0][3], -1, 1)
-       outputs[0][0][4] = np.clip(outputs[0][0][4], -1, 1)
+#    def postprocess_actions(self, outputs):
+#        outputs[0][0][0] = np.clip(outputs[0][0][0], -1, 1)
+#        outputs[0][0][1] = np.clip(outputs[0][0][1], -1, 1)
+#        outputs[0][0][2] = np.clip(outputs[0][0][2], -1, 1)
+#        outputs[0][0][3] = np.clip(outputs[0][0][3], -1, 1)
+#        outputs[0][0][4] = np.clip(outputs[0][0][4], -1, 1)
        
-       outputs[0][0][0] = (outputs[0][0][0] + 1) / 2
-       outputs[0][0][1] = (outputs[0][0][1] + 1) / 2
-       outputs[0][0][2] = (outputs[0][0][2] + 1) / 2
-       outputs[0][0][3] = (outputs[0][0][3] + 1) / 2
-       return outputs[0].squeeze()
+#        outputs[0][0][0] = (outputs[0][0][0] + 1) / 2
+#        outputs[0][0][1] = (outputs[0][0][1] + 1) / 2
+#        outputs[0][0][2] = (outputs[0][0][2] + 1) / 2
+#        outputs[0][0][3] = (outputs[0][0][3] + 1) / 2
+#        return outputs[0].squeeze()
