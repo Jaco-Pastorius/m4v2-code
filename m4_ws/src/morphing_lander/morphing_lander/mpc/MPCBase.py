@@ -29,7 +29,7 @@ from acados_template import AcadosOcpSolver
 
 # Morphing lander imports
 from morphing_lander.mpc.mpc                 import create_ocp_solver_description, create_ocp_solver_description_with_int
-from morphing_lander.mpc.trajectories        import traj_jump_time
+from morphing_lander.mpc.trajectories        import traj_jump_time, traj_minjerk
 from morphing_lander.mpc.parameters          import params_
 
 from IPython import embed
@@ -180,7 +180,8 @@ class MPCBase(Node,ABC):
             phi_current = np.copy(self.tilt_angle) 
 
             # update reference (make sure reference starts from ground and ends on ground)
-            x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(self.current_time)
+            # x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(self.current_time)
+            x_ref,u_ref,tilt_vel,tracking_done = traj_minjerk(self.current_time)
 
             # # update reference based on joystick/RC commands
             # tracking_done = False
@@ -205,7 +206,9 @@ class MPCBase(Node,ABC):
                 # also stop running the mpc
                 u_opt = np.zeros(4,dtype='float')
                 tilt_vel = u_max
-                mpc_flag = False      
+                mpc_flag = False   
+                # self.drive_speed = 1.0
+                # self.turn_speed  = 0.0   
                 # self.disarm()
 
             # run mpc
