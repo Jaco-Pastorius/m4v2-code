@@ -121,14 +121,14 @@ params_['max_tilt_in_flight']    = deg2rad(50)
 params_['max_tilt_on_land']      = deg2rad(85)
 
 # ground detector parameters
-params_['land_height']    = -0.10                     # height at which we consider robot landed
-params_['takeoff_height'] = -0.50                     # height at which we consider robot in flight
+params_['land_height']    = -0.25                     # height at which we consider robot landed
+params_['takeoff_height'] = -0.60                     # height at which we consider robot in flight
 
 # trajectory parameters
-params_['z0'] = 0.0
-params_['zf'] = -0.15
-# params_['z0'] = -0.11
-# params_['zf'] = -0.21
+# params_['z0'] = 0.0
+# params_['zf'] = -0.15
+params_['z0'] = -0.11
+params_['zf'] = -0.21
 
 # emergency parameters
 params_['emergency_descent_velocity'] = 0.3           # emergency descent velocity if in strange scenario
