@@ -180,8 +180,8 @@ class MPCBase(Node,ABC):
             phi_current = np.copy(self.tilt_angle) 
 
             # update reference (make sure reference starts from ground and ends on ground)
-            # x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(self.current_time)
-            x_ref,u_ref,tilt_vel,tracking_done = traj_minjerk(self.current_time)
+            x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(self.current_time)
+            # x_ref,u_ref,tilt_vel,tracking_done = traj_minjerk(self.current_time)
 
             # # update reference based on joystick/RC commands
             # tracking_done = False

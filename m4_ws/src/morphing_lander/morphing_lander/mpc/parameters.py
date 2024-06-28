@@ -124,6 +124,12 @@ params_['max_tilt_on_land']      = deg2rad(85)
 params_['land_height']    = -0.10                     # height at which we consider robot landed
 params_['takeoff_height'] = -0.50                     # height at which we consider robot in flight
 
+# trajectory parameters
+params_['z0'] = 0.0
+params_['zf'] = -0.15
+# params_['z0'] = -0.11
+# params_['zf'] = -0.21
+
 # emergency parameters
 params_['emergency_descent_velocity'] = 0.3           # emergency descent velocity if in strange scenario
 
@@ -183,15 +189,15 @@ params_['integral_gain'] = 1.0
 params_['w_x']        = 10.0
 params_['w_y']        = 10.0
 params_['w_z']        = 10.0
-params_['w_dx']       = 0.1
-params_['w_dy']       = 0.1
-params_['w_dz']       = 0.1
-params_['w_phi']      = 0.05
-params_['w_th']       = 0.05
-params_['w_psi']      = 0.05
-params_['w_ox']       = 0.05
-params_['w_oy']       = 0.05
-params_['w_oz']       = 0.05
+params_['w_dx']       = 1.0
+params_['w_dy']       = 1.0
+params_['w_dz']       = 1.0
+params_['w_phi']      = 0.1
+params_['w_th']       = 0.1
+params_['w_psi']      = 0.1
+params_['w_ox']       = 0.1
+params_['w_oy']       = 0.1
+params_['w_oz']       = 0.1
 params_['w_u']        = 1.0
 params_['w_int']      = 20.0
 

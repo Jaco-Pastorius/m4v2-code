@@ -12,12 +12,14 @@ T_max                      = params_.get('T_max')
 u_max                      = params_.get('u_max')
 emergency_descent_velocity = params_.get('emergency_descent_velocity')
 land_height                = params_.get('land_height')
+z0                         = params_.get('z0')
+zf                         = params_.get('zf')
 
 # Define how gravity lies:
 gravity = [0,0,9.81]
 
 # Define the trajectory starting state:
-pos0 = [0, 0, -0.11] #position
+pos0 = [0, 0, z0] #position
 vel0 = [0, 0, 0] #velocity
 acc0 = [0, 0, 0] #acceleration
 
@@ -27,13 +29,13 @@ vel1 = [0, 0, 0]  # velocity
 acc1 = [0, 0, 0]  # acceleration
 
 # Define the third state
-pos2 = [3, 0, -0.21]  # position
+pos2 = [3, 0, zf]  # position
 vel2 = [2.0, 0, 0.0]  # velocity
 acc2 = [0, 0, 0]  # acceleration
 
 # Define the duration:
-T1 = 3.0
-T2 = 3.0
+T1 = 5.0
+T2 = 5.0
 t_tilt = T1 + 0.6*(T2-T1)
  
 # traj0
@@ -126,16 +128,11 @@ def traj_jump_time(t):
 
     done = False
 
-    # z0 = -0.265
-    # zf = -0.35
-    z0 = 0.0
-    zf = 0.0
-
     H         = -1.5          # 1.5 m 
     H_down    =  H - zf
     v_up      = -0.50
     v_down    =  0.30 
-    v_forward =  1.0          # 0.0
+    v_forward =  0.75          # 0.0
 
     t1 = H/v_up
     t2 = t1 + 5.0
