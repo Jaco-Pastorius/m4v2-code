@@ -181,13 +181,14 @@ class MPCBase(Node,ABC):
 
             # update reference (make sure reference starts from ground and ends on ground)
             x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(self.current_time)
+            x_ref_copy = np.copy(x_ref)
 
             # # update reference based on joystick/RC commands
             # tracking_done = False
             # x_ref,u_ref,tilt_vel = self.get_reference()
 
             # update integral state
-            self.integral_state += Ts * integral_gain * (x_current[2]-x_ref[2])
+            self.integral_state += Ts * integral_gain * (x_current[2]-x_ref_copy[2])
 
             # check if robot has taken off
             self.takeoff_detector(x_current)
@@ -212,7 +213,7 @@ class MPCBase(Node,ABC):
             x_next = np.zeros(12)
             if mpc_flag: 
                 # u_opt,x_next,comp_time = self.mpc_update(x_current,phi_current,x_ref,u_ref)
-                u_opt,x_next,comp_time = self.mpc_update_with_int(x_current,phi_current,x_ref,u_ref,self.integral_state)
+                u_opt,x_next,comp_time = self.mpc_update_with_int(x_current,phi_current,x_ref_copy,u_ref,self.integral_state)
             else:
                 u_opt = np.zeros(4,dtype='float')
                 comp_time = -1.0
