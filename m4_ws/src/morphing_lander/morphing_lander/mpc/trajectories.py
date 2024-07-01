@@ -127,6 +127,7 @@ def traj_fly_up(t):
 def traj_jump_time(t):
 
     done = False
+    drive_vel = [0.0,0.0] # drive speed, turn speed 
 
     H         = -1.5          # 1.5 m 
     H_down    =  H - zf
@@ -166,7 +167,7 @@ def traj_jump_time(t):
     x_ref[8] = dz
 
     u_ref = m*g/T_max*np.ones(4)
-    return x_ref,u_ref,tilt_vel, done
+    return x_ref,u_ref,tilt_vel,drive_vel,done
 
 def traj_descent_time(t):
     out = np.zeros(12)

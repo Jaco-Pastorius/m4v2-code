@@ -108,8 +108,8 @@ class MPCSim(MPCBase):
         msg.control[5] = self.tilt_angle/(pi/2)
 
         # get normalized drive actions (m4 sdf is set up for 0 to be negative velocity 0.5 to be zero and 1 to be positive velocity)
-        u_left, u_right = drive_mixer(self.drive_speed,self.turn_speed)
-        u_left_normalized = (u_left + 1.0)/2.0
+        u_left, u_right    = drive_mixer(self.drive_speed,self.turn_speed)
+        u_left_normalized  = (u_left + 1.0)/2.0
         u_right_normalized = -(u_right + 1.0)/2.0
 
         # publish normalized drive actions

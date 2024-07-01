@@ -4,13 +4,14 @@ float32[12] x
 float32[12] xref
 float32[12] xnext
 
-float32[4] u
-float32[4] uref
+float32[4]  u
+float32[4]  uref
 
-float32 varphi
-float32 tiltvel
+float32     varphi
+float32     tiltvel
+float32[2]  drivevel
 
-int32 status
-int32 trackingdone
-int32 grounded
-float32 comptime
+int32       status
+int32       trackingdone
+int32       grounded
+float32     comptime

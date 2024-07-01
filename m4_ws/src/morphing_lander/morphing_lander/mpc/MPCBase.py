@@ -180,7 +180,7 @@ class MPCBase(Node,ABC):
             phi_current = np.copy(self.tilt_angle) 
 
             # update reference (make sure reference starts from ground and ends on ground)
-            x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(self.current_time)
+            x_ref,u_ref,tilt_vel,drive_vel,tracking_done = traj_jump_time(self.current_time)
             x_ref_copy = np.copy(x_ref)
 
             # # update reference based on joystick/RC commands
@@ -207,8 +207,6 @@ class MPCBase(Node,ABC):
                 u_opt = np.zeros(4,dtype='float')
                 tilt_vel = u_max
                 mpc_flag = False   
-                # self.drive_speed = 1.0
-                # self.turn_speed  = 0.0   
                 # self.disarm()
 
             # run mpc
@@ -226,12 +224,19 @@ class MPCBase(Node,ABC):
             # limit tilt velocity to ensure safety
             tilt_vel = self.limit_tilt_vel(tilt_vel,self.mission_done)
 
+            # limit drive velocity to ensure safety
+            drive_vel = self.limit_drive_vel(drive_vel,grounded_flag)
+
             # publish tilt velocity
             self.publish_tilt_vel(tilt_vel)
 
-            print(f"tilt_angle : {self.tilt_angle}")
-            print(f"tilt_vel : {tilt_vel}")
+            # publish drive velocity
+            self.publish_drive_vel(drive_vel)
 
+            print(f"tilt_angle : {self.tilt_angle}")
+            print(f"tilt_vel   : {tilt_vel}")
+            print(f"drive_vel  : {drive_vel}")
+           
             # publish thrust for landing estimator
             self.publish_vehicle_thrust_setpoint(-np.sum(u_opt)/4)
 
@@ -352,6 +357,11 @@ class MPCBase(Node,ABC):
                 tilt_vel = 0.0
         return tilt_vel
 
+    def limit_drive_vel(self,drive_vel,grounded_flag):
+        if not grounded_flag:
+            drive_vel = [0.0,0.0]
+        return drive_vel
+
     def switch_to_offboard(self):
         self.publish_offboard_control_mode_direct_actuator() 
         # go to offboard mode after 10 setpoints and stop counter after reaching 11 
@@ -422,10 +432,10 @@ class MPCBase(Node,ABC):
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         self.tilt_vel_publisher_.publish(msg)
 
-    def publish_drive_vel(self,drive_speed,turn_speed):
+    def publish_drive_vel(self,drive_vel):
         msg = DriveVel()
-        msg.drivespeed = drive_speed
-        msg.turnspeed  = turn_speed
+        msg.drivespeed = drive_vel[0]
+        msg.turnspeed  = drive_vel[1]
         msg.timestamp = int(Clock().now().nanoseconds / 1000) # time in microseconds
         self.drive_vel_publisher_.publish(msg)
 
