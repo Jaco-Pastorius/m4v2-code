@@ -25,6 +25,7 @@ v_max_absolute = params_['v_max_absolute']
 max_dx         = params_['max_dx']
 max_dy         = params_['max_dy']
 max_dz         = params_['max_dz']
+tilt_height    = params_['tilt_height']
 
 class MPCSim(MPCBase): 
     def __init__(self):
@@ -73,6 +74,7 @@ class MPCSim(MPCBase):
         return True
     
     def get_reference(self):
+        drive_vel = [0.0,0.0]
         x_ref = zeros(12)
         u_ref = zeros(4)
 
@@ -84,13 +86,17 @@ class MPCSim(MPCBase):
         x_ref[7] = self.input[1]
         x_ref[8] = self.input[2]
 
-        if self.input[2] > 0.0 and self.state[2] > -1.0:
-            tilt_vel = 1.0
+        if not self.mission_done:
+            if self.takeoff_flag and abs(self.state[2]) < abs(tilt_height):
+                tilt_vel = 1.0
+            else:
+                tilt_vel = -1.0
         else:
-            tilt_vel = -1.0
-        # tilt_vel = 0.0
+            drive_vel[0] = self.input[0]
+            drive_vel[1] = self.input[1]
+            tilt_vel = 1.0
 
-        return x_ref, u_ref, tilt_vel
+        return x_ref, u_ref, tilt_vel, drive_vel
 
     def publish_actuator_motors(self,u):
         # publish to px4

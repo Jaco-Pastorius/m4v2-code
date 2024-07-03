@@ -28,7 +28,7 @@ from custom_msgs.msg import DriveVel
 from acados_template import AcadosOcpSolver
 
 # Morphing lander imports
-from morphing_lander.mpc.mpc                 import create_ocp_solver_description_with_int
+from morphing_lander.mpc.mpc                 import create_ocp_solver_description,create_ocp_solver_description_with_int
 from morphing_lander.mpc.trajectories        import traj_jump_time
 from morphing_lander.mpc.parameters          import params_
 
@@ -119,8 +119,8 @@ class MPCBase(Node,ABC):
         self.counter = 0
 
         # compile acados solver (ocp)
-        # ocp  = create_ocp_solver_description()
-        ocp = create_ocp_solver_description_with_int()
+        ocp  = create_ocp_solver_description()
+        # ocp = create_ocp_solver_description_with_int()
         self.acados_ocp_solver = AcadosOcpSolver(
             ocp, 
             json_file=os.path.join(acados_ocp_path, ocp.model.name + '_acados_ocp.json'),
@@ -130,14 +130,14 @@ class MPCBase(Node,ABC):
 
         # solver initialization
         for stage in range(N_horizon + 1):
-            # self.acados_ocp_solver.set(stage, "x", np.zeros(12))
-            self.acados_ocp_solver.set(stage, "x", np.zeros(13))
+            self.acados_ocp_solver.set(stage, "x", np.zeros(12))
+            # self.acados_ocp_solver.set(stage, "x", np.zeros(13))
             if use_residual_model:
                 l4c_params = l4c_residual_model.get_params(np.zeros((1,model_ninputs)))
                 self.acados_ocp_solver.set(stage, "p", np.hstack((np.array([0.0]),l4c_params.squeeze())))
             else:
-                self.acados_ocp_solver.set(stage, "p", np.array([0.0,0.0]))
-                # self.acados_ocp_solver.set(stage, "p", np.array([0.0]))
+                # self.acados_ocp_solver.set(stage, "p", np.array([0.0,0.0]))
+                self.acados_ocp_solver.set(stage, "p", np.array([0.0]))
 
         for stage in range(N_horizon):
             self.acados_ocp_solver.set(stage, "u", np.zeros(4))
@@ -179,16 +179,16 @@ class MPCBase(Node,ABC):
             x_current   = np.copy(self.state) 
             phi_current = np.copy(self.tilt_angle) 
 
-            # update reference (make sure reference starts from ground and ends on ground)
-            x_ref,u_ref,tilt_vel,drive_vel,tracking_done = traj_jump_time(self.current_time)
-            x_ref_copy = np.copy(x_ref)
+            # # update reference (make sure reference starts from ground and ends on ground)
+            # x_ref,u_ref,tilt_vel,drive_vel,tracking_done = traj_jump_time(self.current_time)
 
-            # # update reference based on joystick/RC commands
-            # tracking_done = False
-            # x_ref,u_ref,tilt_vel = self.get_reference()
+            # update reference based on joystick/RC commands
+            tracking_done = False
+            drive_vel     = [0.0,0.0]
+            x_ref,u_ref,tilt_vel,drive_vel = self.get_reference()
 
             # update integral state
-            self.integral_state += Ts * integral_gain * (x_current[2]-x_ref_copy[2])
+            self.integral_state += Ts * integral_gain * (x_current[2]-x_ref[2])
 
             # check if robot has taken off
             self.takeoff_detector(x_current)
@@ -207,13 +207,15 @@ class MPCBase(Node,ABC):
                 u_opt = np.zeros(4,dtype='float')
                 tilt_vel = u_max
                 mpc_flag = False   
+                self.drive_speed = drive_vel[0]
+                self.turn_speed  = drive_vel[1]
                 # self.disarm()
 
             # run mpc
             x_next = np.zeros(12)
             if mpc_flag: 
-                # u_opt,x_next,comp_time = self.mpc_update(x_current,phi_current,x_ref,u_ref)
-                u_opt,x_next,comp_time = self.mpc_update_with_int(x_current,phi_current,x_ref_copy,u_ref,self.integral_state)
+                u_opt,x_next,comp_time = self.mpc_update(x_current,phi_current,x_ref,u_ref)
+                # u_opt,x_next,comp_time = self.mpc_update_with_int(x_current,phi_current,x_ref,u_ref,self.integral_state)
             else:
                 u_opt = np.zeros(4,dtype='float')
                 comp_time = -1.0

@@ -1,5 +1,5 @@
 # Numpy imports
-from numpy import array
+from numpy import array,zeros
 
 # ROS imports
 import rclpy
@@ -16,9 +16,13 @@ from morphing_lander.mpc.MPCBase    import MPCBase
 from morphing_lander.mpc.parameters import params_
 from morphing_lander.mpc.utils      import euler_from_quaternion
 
-min          = params_.get('min')
-max          = params_.get('max')
-dead         = params_.get('dead')
+min            = params_.get('min')
+max            = params_.get('max')
+dead           = params_.get('dead')
+max_dx         = params_.get('max_dx')
+max_dy         = params_.get('max_dy')
+max_dz         = params_.get('max_dz')
+tilt_height    = params_.get('tilt_height')
 
 class MPCHardware(MPCBase): 
     def __init__(self):
@@ -45,6 +49,9 @@ class MPCHardware(MPCBase):
         self.offboard_switch = False
         self.mpc_switch      = False
 
+        # control input
+        self.input = zeros(4) # vx, vy, vz, vtilt
+
     def mpc_trigger(self):
         return self.mpc_switch
         
@@ -52,8 +59,30 @@ class MPCHardware(MPCBase):
         return self.offboard_switch
     
     def get_reference(self):
-        pass
+        drive_vel = [0.0,0.0]
+        x_ref = zeros(12)
+        u_ref = zeros(4)
 
+        x_ref[0] = self.state[0] + self.input[0]
+        x_ref[1] = self.state[1] + self.input[1]
+        x_ref[2] = self.state[2] + self.input[2]
+
+        x_ref[6] = self.input[0]
+        x_ref[7] = self.input[1]
+        x_ref[8] = self.input[2]
+
+        if not self.mission_done:
+            if self.takeoff_flag and abs(self.state[2]) < abs(tilt_height):
+                tilt_vel = 1.0
+            else:
+                tilt_vel = -1.0
+        else:
+            drive_vel[0] = self.input[0]
+            drive_vel[1] = self.input[1]
+            tilt_vel = 1.0
+
+        return x_ref, u_ref, tilt_vel, drive_vel
+    
     def vehicle_odometry_callback(self, msg): 
         # get state from odometry
         p = msg.position
@@ -72,6 +101,11 @@ class MPCHardware(MPCBase):
             self.mpc_switch = True
         else:
             self.mpc_switch = False
+
+        # get input for manual control
+        self.input[0]  = max_dx * -(msg.values[1]-dead)(max-dead)
+        self.input[1]  = max_dy *  (msg.values[0]-dead)(max-dead)
+        self.input[2]  = max_dz *  (msg.values[2]-dead)(max-dead)
 
     def publish_actuator_motors(self,u):
         # publish to px4
