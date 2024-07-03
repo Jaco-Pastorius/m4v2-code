@@ -432,7 +432,6 @@ def hybrid_dynamics_func():
     
     return Function('hybrid_dynamics_func',[X,U,varphi,grounded],[f_expl])
 
-
 # special functions
 def f():
     X = MX.sym("X",12)
