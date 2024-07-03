@@ -3,6 +3,10 @@ from scipy.interpolate import interp1d
 # import onnxruntime as ort
 from scipy.spatial.transform import Rotation as R
 from IPython import embed
+from morphing_lander.mpc.parameters import params_
+
+wheel_base   = params_.get('wheel_base')
+wheel_radius = params_.get('wheel_radius')
 
 def euler_from_quaternion(quaternion):
     """
@@ -60,8 +64,9 @@ def interpolate_values(x_interpolators, u_interpolators, t_new):
     return x_new, u_new
 
 def drive_mixer(drive_speed,turn_speed):
-    u_right = drive_speed + turn_speed
-    u_left  = drive_speed - turn_speed
+    R,l = wheel_radius,wheel_base
+    u_right = 1/R * (drive_speed + l*turn_speed)
+    u_left  = 1/R * (drive_speed - l*turn_speed)
     return u_left, u_right
 
 def theta_fit(varphi):

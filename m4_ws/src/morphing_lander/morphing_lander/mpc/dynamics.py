@@ -357,6 +357,82 @@ def dynamics_with_int_action_func():
     
     return Function('dynamics_with_int_action_func',[X,U,varphi,z_ref],[f_expl])
 
+# driving dynamics
+def driving_dynamics_func():
+    # get symbolic variables
+    X      = MX.sym('X',3,1)
+    U      = MX.sym('U',2,1)
+
+    # get state variables
+    x      = X[0]
+    y      = X[1]
+    theta  = X[2]
+
+    # get input variables
+    v      = U[0]
+    omega  = U[1]
+
+    # finally write explicit dynamics
+    f_expl = vertcat(v*cos(theta),v*sin(theta),omega)
+    
+    return Function('driving_dynamics_func',[X,U],[f_expl])    
+
+# hybrid dynamics
+def hybrid_dynamics_func():
+    # get symbolic variables
+    X        = MX.sym('X',12,1)
+    U        = MX.sym('U',6,1)
+    varphi   = MX.sym('varphi',1,1)
+    grounded = MX.sym('grounded',1,1)
+
+    # get grounded flag
+    lam     = if_else(grounded,1.0,0.0)
+    not_lam = if_else(grounded,0.0,1.0)
+
+    # get state variables
+    x_B      = X[0]
+    y_B      = X[1]
+    z_B      = X[2]
+    theta_Bz = X[3]
+    theta_By = X[4]
+    theta_Bx = X[5]
+    dx_B     = X[6]
+    dy_B     = X[7]
+    dz_B     = X[8]
+    omega_Bx = X[9]
+    omega_By = X[10]
+    omega_Bz = X[11]
+
+    # q, u
+    q = vertcat(x_B,y_B,z_B,theta_Bz,theta_By,theta_Bx)
+    u = vertcat(dx_B,dy_B,dz_B,omega_Bx,omega_By,omega_Bz)
+
+    # get dynamics matrices
+    M_x = M_func()(X,varphi)
+    b_x = b_func()(X,varphi)
+    g_x = g_func()(X,varphi)  
+    S_x = S_func()(X,varphi)
+
+    # compute inverse mass matrix
+    Minv = inv(M_x)
+    du = not_lam * Minv @ (S_x.T @ U[:-2] - b_x - g_x)
+
+    chid = F_func()(theta_Bx,theta_By,theta_Bz) @ vertcat(omega_Bx,omega_By,omega_Bz)
+
+    # get driving dynamics
+    ug = driving_dynamics_func()(vertcat(X[0],X[1],X[3]),U[4:6])
+
+    # apply driving dynamics only if grounded
+    ug  = lam * ug
+
+    chid[0] = chid[0] + ug[2]
+
+    # finally write explicit dynamics
+    f_expl = vertcat(u[0]+ug[0],u[1]+ug[1],u[2],chid,du)
+    
+    return Function('hybrid_dynamics_func',[X,U,varphi,grounded],[f_expl])
+
+
 # special functions
 def f():
     X = MX.sym("X",12)
@@ -550,6 +626,57 @@ def export_robot_model() -> AcadosModel:
 
     return model
 
+def export_hybrid_robot_model() -> AcadosModel:
+    model_name = "hybrid_morphing_lander"
+
+    # tilt angle
+    varphi = MX.sym("varphi",1)
+
+    # grounded 
+    grounded = MX.sym("grounded",1)
+
+    # write parameters
+    p = vertcat(varphi,grounded)
+
+    # states and controls
+    X = MX.sym("X",12)
+    U = MX.sym("U",6)
+
+    # Explicit nominal dynamics
+    f_expl = hybrid_dynamics_func()(X,U,varphi,grounded)
+
+    # xdot
+    x_B_dot      = MX.sym("x_B_dot")
+    y_B_dot      = MX.sym("y_B_dot")
+    z_B_dot      = MX.sym("z_B_dot")
+    theta_Bz_dot = MX.sym("theta_Bz_dot")
+    theta_By_dot = MX.sym("theta_By_dot")
+    theta_Bx_dot = MX.sym("theta_Bx_dot")
+    dx_B_dot     = MX.sym("dx_B_dot")
+    dy_B_dot     = MX.sym("dy_B_dot")
+    dz_B_dot     = MX.sym("dz_B_dot")
+    omega_Bx_dot = MX.sym("omega_Bx_dot")
+    omega_By_dot = MX.sym("omega_By_dot")
+    omega_Bz_dot = MX.sym("omega_Bz_dot")
+
+    Xdot = vertcat(x_B_dot,y_B_dot,z_B_dot,theta_Bz_dot,theta_By_dot,theta_Bx_dot,dx_B_dot,dy_B_dot,dz_B_dot,omega_Bx_dot,omega_By_dot,omega_Bz_dot)
+
+    # write implicit dynamics 
+    f_impl = Xdot - f_expl
+
+    model = AcadosModel()
+
+    model.f_impl_expr = f_impl
+    model.f_expl_expr = f_expl
+    model.x = X
+    model.xdot = Xdot
+    model.u = U
+    # model.z = z
+    model.p = p
+    model.name = model_name
+
+    return model
+
 def export_discrete_robot_model(DT) -> AcadosModel:
     model_name = "morphing_lander"
 
@@ -580,6 +707,39 @@ def export_discrete_robot_model(DT) -> AcadosModel:
     model.u = U
     model.p = p
     model.disc_dyn_expr = F
+
+    return model
+
+def export_robot_model_driving() -> AcadosModel:
+    model_name = "morphing_lander_driving"
+
+    # states and controls
+    X = MX.sym("X",3)
+    U = MX.sym("U",2)
+
+    # Explicit nominal dynamics
+    f_expl = driving_dynamics_func()(X,U)
+
+    # xdot
+    x_dot      = MX.sym("x_B_dot")
+    y_dot      = MX.sym("y_B_dot")
+    theta_dot  = MX.sym("z_B_dot")
+
+    Xdot = vertcat(x_dot,y_dot,theta_dot)
+
+    # write implicit dynamics 
+    f_impl = Xdot - f_expl
+
+    model = AcadosModel()
+
+    model.f_impl_expr = f_impl
+    model.f_expl_expr = f_expl
+    model.x = X
+    model.xdot = Xdot
+    model.u = U
+    # model.z = z
+    # model.p = p
+    model.name = model_name
 
     return model
 
@@ -652,7 +812,6 @@ def export_discrete_robot_model_with_int_action(DT) -> AcadosModel:
     model.disc_dyn_expr = F
 
     return model
-
 
 def export_robot_model_phi() -> AcadosModel:
     model_name = "morphing_lander"

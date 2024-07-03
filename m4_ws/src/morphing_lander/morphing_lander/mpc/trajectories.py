@@ -14,6 +14,7 @@ emergency_descent_velocity = params_.get('emergency_descent_velocity')
 land_height                = params_.get('land_height')
 z0                         = params_.get('z0')
 zf                         = params_.get('zf')
+Ts                         = params_.get('Ts')
 
 # Define how gravity lies:
 gravity = [0,0,9.81]
@@ -29,14 +30,14 @@ vel1 = [0, 0, 0]  # velocity
 acc1 = [0, 0, 0]  # acceleration
 
 # Define the third state
-pos2 = [3, 0, zf]  # position
-vel2 = [2.0, 0, 0.0]  # velocity
-acc2 = [0, 0, 0]  # acceleration
+pos2 = [4, 0, zf]  # position
+vel2 = [4.0, 0, 0.0]  # velocity
+acc2 = [4.0, 0, 0]  # acceleration
 
 # Define the duration:
-T1 = 5.0
-T2 = 5.0
-t_tilt = T1 + 0.6*(T2-T1)
+T1 = 3.0
+T2 = 3.0
+t_tilt = T1 + 0.8*(T2-T1)
  
 # traj0
 traj0 = quadtraj.RapidTrajectory(pos0, vel0, acc0, gravity)
@@ -52,7 +53,11 @@ traj1.set_goal_velocity(vel2)
 traj1.set_goal_acceleration(acc2)
 traj1.generate(T2)
 
+# global pitch angle
+pitch = 0.0
+
 def traj_minjerk(t):
+    drive_vel = [0.0,0.0]
     tilt_vel = 0.0
     if t < T1:
         pos = traj0.get_position(t)
@@ -72,11 +77,16 @@ def traj_minjerk(t):
         rates  = traj1.get_body_rates(T2)
         thrust = traj1.get_thrust(T2)
 
+    # update pitch angle
+    global pitch
+    pitch += rates[1] * Ts
+
     # write reference 
     x_ref = np.zeros(12)
     x_ref[0] = pos[0]
     x_ref[1] = pos[1]
     x_ref[2] = pos[2]
+    x_ref[4] = pitch
     x_ref[6] = vel[0]
     x_ref[7] = vel[1]
     x_ref[8] = vel[2]
@@ -85,7 +95,7 @@ def traj_minjerk(t):
     x_ref[11] = rates[2]
     u_ref = thrust/T_max*np.ones(4)
     done = False
-    return x_ref,u_ref,tilt_vel,done
+    return x_ref,u_ref,tilt_vel,drive_vel,done
 
 def spatial_tracking(X,traj):
     p = X[:3]
@@ -104,6 +114,7 @@ def spatial_tracking(X,traj):
     return X_ref
 
 def traj_fly_up(t):
+    drive_vel = [0.0,0.0]
     done = False
     H = -1.5
     v_up = -0.5
@@ -122,21 +133,22 @@ def traj_fly_up(t):
     x_ref[8] = dz
     u_ref = m*g/T_max*np.ones(4)
     tilt_vel = 0.0
-    return x_ref,u_ref,tilt_vel, done
+    return x_ref,u_ref,tilt_vel,drive_vel,done
 
 def traj_jump_time(t):
 
     done = False
     drive_vel = [0.0,0.0] # drive speed, turn speed 
 
-    H         = -1.5          # 1.5 m 
+    H         = -1.0          # 1.5 m 
     H_down    =  H - zf
     v_up      = -0.50
     v_down    =  0.30 
-    v_forward =  0.75          # 0.0
+    v_forward =  0.50          # 0.0
+    a_forward =  0.5
 
     t1 = H/v_up
-    t2 = t1 + 5.0
+    t2 = t1 + 2.0
     t3 = t2 + (-H_down/v_down)
     t_tilt = 0.5*t2 + 0.5*t3
     
@@ -149,14 +161,14 @@ def traj_jump_time(t):
         z, dz    = z0 + H, 0.0
         tilt_vel = 0.0
     elif ((t>t2) and (t<t3)):
-        x, dx    = v_forward*(t-t2), v_forward
+        x, dx    = v_forward*(t-t2) + a_forward*(t-t2)*(t-t2), v_forward + a_forward*(t-t2)
         z,dz = z0 + H + v_down * (t-t2), v_down
         tilt_vel = 0.0
         if t>t_tilt:
             tilt_vel = 1.0
     elif (t>t3):
-        x,dx = v_forward*(t3-t2),0.0
-        z,dz = zf,0.0
+        x,dx = v_forward*(t3-t2)+ a_forward*(t3-t2)*(t3-t2),0.0
+        z,dz = z0 + H + v_down * (t3-t2),0.0
         tilt_vel = 1.0
         done = True
 
@@ -183,17 +195,25 @@ def traj_descent_time(t):
     return out
 
 def traj_circle_time(t):
-    done = False 
-    if t > 5.0 : done = True
 
-    x_ref = np.zeros(12)
-    x_ref[0] = 2.0*np.cos(2*np.pi/5.0*t)
-    x_ref[1] = 2.0*np.sin(2*np.pi/5.0*t)
-    x_ref[2] = -3.5
 
-    u_ref = m*g/T_max*np.ones(4)
-    tilt_vel = 0.0
-    return x_ref,u_ref,tilt_vel, done
+    x_ref,u_ref,tilt_vel,drive_vel,done_up = traj_fly_up(t)
+
+    if done_up:
+        drive_vel = [0.0,0.0]
+        done = False 
+        if t > 5.0 : done = True
+
+        x_ref = np.zeros(12)
+        x_ref[0] = 2.0*np.cos(2*np.pi/5.0*t)
+        x_ref[1] = 2.0*np.sin(2*np.pi/5.0*t)
+        x_ref[2] = -1.5
+
+        u_ref = m*g/T_max*np.ones(4)
+        tilt_vel = 0.0
+    else:
+        done = False
+    return x_ref,u_ref,tilt_vel,drive_vel,done
 
 def emergency_descent_time(t,p_emergency):
     x_ref = np.zeros(12)

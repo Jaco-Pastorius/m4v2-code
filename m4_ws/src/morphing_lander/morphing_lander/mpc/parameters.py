@@ -65,16 +65,20 @@ from pathlib import Path
 params_ = {}
 
 # high level parameters
-params_['Ts']                    = 0.01                           # control frequency of MPC
-params_['Ts_tilt_controller']    = 0.01                           # control frequency of TiltController
-params_['Ts_drive_controller']   = 0.01                           # control frequency of DriveController
+params_['Ts']                    = 0.007                          # control frequency of MPC
+params_['Ts_tilt_controller']    = params_.get('Ts')              # control frequency of TiltController
+params_['Ts_drive_controller']   = params_.get('Ts')              # control frequency of DriveController
 
 params_['queue_size']            = 1                              # queue size of ros2 messages
 params_['warmup_time']           = 1.0                            # time after which mpc controller is started (seconds)
 
 # acados mpc solver and integrator paths
-params_['acados_ocp_path']       = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_models/'
-params_['acados_sim_path']       = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_sims/'
+params_['acados_ocp_path']               = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_models/'
+params_['acados_sim_path']               = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_sims/'
+params_['acados_ocp_path_driving']       = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_models_driving/'
+params_['acados_sim_path_driving']       = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_sims_driving/'
+params_['acados_ocp_path_hybrid']       = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_models_hybrid/'
+params_['acados_sim_path_hybrid']       = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados_sims_hybrid/'
 
 # generate and build flags
 params_['generate_mpc']          = True
@@ -121,14 +125,16 @@ params_['max_tilt_in_flight']    = deg2rad(50)
 params_['max_tilt_on_land']      = deg2rad(85)
 
 # ground detector parameters
-params_['land_height']    = -0.25                     # height at which we consider robot landed
+params_['land_height']    = -0.07                    # height at which we consider robot landed
 params_['takeoff_height'] = -0.60                     # height at which we consider robot in flight
+# params_['land_height']    = -0.23                     # height at which we consider robot landed
+# params_['takeoff_height'] = -0.60                     # height at which we consider robot in flight
 
 # trajectory parameters
-# params_['z0'] = 0.0
-# params_['zf'] = -0.15
-params_['z0'] = -0.11
-params_['zf'] = -0.21
+params_['z0'] = 0.0
+params_['zf'] = -0.05
+# params_['z0'] = -0.11
+# params_['zf'] = -0.21
 
 # emergency parameters
 params_['emergency_descent_velocity'] = 0.3           # emergency descent velocity if in strange scenario
@@ -136,10 +142,13 @@ params_['emergency_descent_velocity'] = 0.3           # emergency descent veloci
 # mpc parameters
 params_['N_horizon']  = 10
 params_['T_horizon']  = 1.0
+params_['N_horizon_driving']  = 20
+params_['T_horizon_driving']  = 2.0
+
 
 # kinematic driving parameters
-params_['wheel_base']                 = 0.15      # half the distance between the wheels
-params_['wheel_radius']               = 0.12      # the wheel radius 
+params_['wheel_base']                 = 0.135      # half the distance between the wheels
+params_['wheel_radius']               = 0.125      # the wheel radius 
 params_['max_wheel_angular_velocity'] = 10.0      # rad/s
 params_['max_drive_speed']            = params_.get('wheel_radius') * params_.get('max_wheel_angular_velocity')  # m/s
 params_['max_turn_speed']             = params_.get('wheel_radius') * params_.get('max_wheel_angular_velocity') / params_.get('wheel_base')   # rad/s
@@ -189,17 +198,17 @@ params_['integral_gain'] = 1.0
 params_['w_x']        = 10.0
 params_['w_y']        = 10.0
 params_['w_z']        = 10.0
-params_['w_dx']       = 1.0
-params_['w_dy']       = 1.0
-params_['w_dz']       = 1.0
-params_['w_phi']      = 0.1
-params_['w_th']       = 0.1
-params_['w_psi']      = 0.1
-params_['w_ox']       = 0.1
-params_['w_oy']       = 0.1
-params_['w_oz']       = 0.1
+params_['w_dx']       = 0.1
+params_['w_dy']       = 0.1
+params_['w_dz']       = 0.1
+params_['w_phi']      = 0.05
+params_['w_th']       = 0.05
+params_['w_psi']      = 0.05
+params_['w_ox']       = 0.05
+params_['w_oy']       = 0.05
+params_['w_oz']       = 0.05
 params_['w_u']        = 1.0
-params_['w_int']      = 20.0
+params_['w_int']      = 0.0
 
 params_['rho']   = 0.1
 params_['gamma'] = 1.0
@@ -208,3 +217,8 @@ params_['gamma'] = 1.0
 params_['Q_mat']          = diag([params_['w_x'],params_['w_y'],params_['w_z'],params_['w_psi'],params_['w_th'],params_['w_phi'],params_['w_dx'],params_['w_dy'],params_['w_dz'],params_['w_ox'],params_['w_oy'],params_['w_oz']])
 params_['R_mat']          = params_['rho'] * diag([params_['w_u'],params_['w_u'],params_['w_u'],params_['w_u']])
 params_['Q_mat_terminal'] = params_['gamma'] * params_['Q_mat']
+
+# cost function driving
+params_['Q_mat_driving']          = diag([1.,1.,1.])
+params_['R_mat_driving']          = 1e-5 * diag([1.,1.])
+params_['Q_mat_terminal_driving'] = params_['Q_mat_driving']
