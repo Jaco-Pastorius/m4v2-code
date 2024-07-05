@@ -113,7 +113,7 @@ params_['real_time_factor']      = 1.0
 # manual control
 params_['max_dx']                = 1.0           # max x velocity
 params_['max_dy']                = 1.0           # max y velocity
-params_['max_dz']                = 1.0           # max z velocity
+params_['max_dz']                = 0.75           # max z velocity
 params_['tilt_height']           = -1.0          # height at which tilt is enabled
 
 # rc inputs
@@ -126,10 +126,11 @@ params_['max_tilt_in_flight']    = deg2rad(50)
 params_['max_tilt_on_land']      = deg2rad(85)
 
 # ground detector parameters
-params_['land_height']    = -0.07                    # height at which we consider robot landed
-params_['takeoff_height'] = -0.60                     # height at which we consider robot in flight
-# params_['land_height']    = -0.23                     # height at which we consider robot landed
+# params_['land_height']    = -0.07                    # height at which we consider robot landed
 # params_['takeoff_height'] = -0.60                     # height at which we consider robot in flight
+# params_['land_height']    = -0.12                     # height at which we consider robot landed
+params_['land_height']    = -0.23                     # height at which we consider robot landed
+params_['takeoff_height'] = -0.60                     # height at which we consider robot in flight
 
 # trajectory parameters
 params_['z0'] = 0.0
@@ -202,11 +203,11 @@ params_['w_z']        = 1.0
 params_['w_dx']       = 10.0
 params_['w_dy']       = 10.0
 params_['w_dz']       = 10.0
-params_['w_phi']      = 1.0
-params_['w_th']       = 1.0
-params_['w_psi']      = 1.0
-params_['w_ox']       = 1.5
-params_['w_oy']       = 1.5
+params_['w_phi']      = 0.1
+params_['w_th']       = 0.1
+params_['w_psi']      = 0.1
+params_['w_ox']       = 3.0
+params_['w_oy']       = 5.0
 params_['w_oz']       = 1.5
 params_['w_u']        = 1.0
 params_['w_int']      = 20.0

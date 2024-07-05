@@ -72,7 +72,7 @@ class MPCHardware(MPCBase):
         x_ref[8] = self.input[2]
 
         if not self.mission_done:
-            if self.takeoff_flag and abs(self.state[2]) < abs(tilt_height):
+            if self.takeoff_flag and abs(self.state[2]) < abs(tilt_height) and self.state[8] > 0.05:
                 tilt_vel = 1.0
             else:
                 tilt_vel = -1.0
@@ -103,9 +103,9 @@ class MPCHardware(MPCBase):
             self.mpc_switch = False
 
         # get input for manual control
-        self.input[0]  = max_dx * -(msg.values[1]-dead)(max-dead)
-        self.input[1]  = max_dy *  (msg.values[0]-dead)(max-dead)
-        self.input[2]  = max_dz *  (msg.values[2]-dead)(max-dead)
+        self.input[0]  = max_dx * -(msg.values[1]-dead)/(max-dead)
+        self.input[1]  = max_dy *  (msg.values[0]-dead)/(max-dead)
+        self.input[2]  = max_dz * -(msg.values[2]-dead)/(max-dead)
 
     def publish_actuator_motors(self,u):
         # publish to px4
