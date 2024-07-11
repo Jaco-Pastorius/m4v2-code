@@ -28,6 +28,8 @@ setup(
         'console_scripts': [
             'tilt_controller_hardware = morphing_lander.tilt_controller_hardware:main',
             'tilt_controller_sim = morphing_lander.tilt_controller_sim:main',
+            'drive_controller_hardware = morphing_lander.drive_controller_hardware:main',
+            'drive_controller_sim = morphing_lander.drive_controller_sim:main',
             'mpc_controller_hardware = morphing_lander.mpc_controller_hardware:main',
             'mpc_controller_sim = morphing_lander.mpc_controller_sim:main',
             'rl_controller_sim = morphing_lander.rl_controller_sim:main',

@@ -1,7 +1,7 @@
 from __future__ import print_function, division
 import numpy as np 
 from morphing_lander.mpc.parameters import params_
-import morphing_lander.mpc.quadtraj as quadtraj
+import morphing_lander.mpc.trajgen as trajgen
 from morphing_lander.mpc.utils import create_interpolators, interpolate_values
 
 # get parameters
@@ -10,7 +10,6 @@ m                          = params_.get('m')
 g                          = params_.get('g')
 T_max                      = params_.get('T_max')
 u_max                      = params_.get('u_max')
-emergency_descent_velocity = params_.get('emergency_descent_velocity')
 land_height                = params_.get('land_height')
 z0                         = params_.get('z0')
 zf                         = params_.get('zf')
@@ -40,14 +39,14 @@ T2 = 3.0
 t_tilt = T1 + 0.8*(T2-T1)
  
 # traj0
-traj0 = quadtraj.RapidTrajectory(pos0, vel0, acc0, gravity)
+traj0 = trajgen.RapidTrajectory(pos0, vel0, acc0, gravity)
 traj0.set_goal_position(pos1)
 traj0.set_goal_velocity(vel1)
 traj0.set_goal_acceleration(acc1)
 traj0.generate(T1)
 
 # traj1
-traj1 = quadtraj.RapidTrajectory(pos1, vel1, acc1, gravity)
+traj1 = trajgen.RapidTrajectory(pos1, vel1, acc1, gravity)
 traj1.set_goal_position(pos2)
 traj1.set_goal_velocity(vel2)
 traj1.set_goal_acceleration(acc2)
@@ -140,17 +139,17 @@ def traj_jump_time(t):
     done = False
     drive_vel = [0.0,0.0] # drive speed, turn speed 
 
-    H         = -1.0          # 1.5 m 
+    H         = -1.5          # 1.5 m 
     H_down    =  H - zf
     v_up      = -0.50
     v_down    =  0.30 
-    v_forward =  0.50          # 0.0
-    a_forward =  0.5
+    v_forward =  0.0         # 0.0
+    a_forward =  0.0
 
     t1 = H/v_up
     t2 = t1 + 2.0
     t3 = t2 + (-H_down/v_down)
-    t_tilt = 0.5*t2 + 0.5*t3
+    t_tilt = 0.8*t2 + 0.2*t3
     
     if (t<t1): 
         x, dx    = 0.0, 0.0
@@ -214,30 +213,6 @@ def traj_circle_time(t):
     else:
         done = False
     return x_ref,u_ref,tilt_vel,drive_vel,done
-
-def emergency_descent_time(t,p_emergency):
-    x_ref = np.zeros(12)
-    x_ref[0] = p_emergency[0]
-    x_ref[1] = p_emergency[1]
-    x_ref[2] = p_emergency[2] + t*emergency_descent_velocity
-    x_ref[8] = emergency_descent_velocity
-    if x_ref[2] >= 0.0 : 
-        x_ref[2] = 0.0
-    u_ref = m*g/T_max*np.ones(4)
-    return x_ref,u_ref
-
-def emergency_descent(x_current,p_emergency):
-    N_traj = 100
-    traj_emergency = np.zeros((12,N_traj))
-    traj_emergency[0,:] = p_emergency[0]*np.ones(N_traj)
-    traj_emergency[1,:] = p_emergency[1]*np.ones(N_traj)
-    traj_emergency[2,:] = np.linspace(p_emergency[2]-1.0,0.0,N_traj)
-    traj_emergency[8,:] = 0.3*np.ones((1,N_traj))
-    x_ref = spatial_tracking(x_current,traj_emergency)
-    u_ref = m*g/T_max*np.ones(4,dtype='float')
-    tilt_vel = -u_max
-    return x_ref,u_ref,tilt_vel
-
 
 # # Create interpolators
 # x_opt_vec = np.load('/home/m4pc/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/optimal_trajectory/x_vec.npy')

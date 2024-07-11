@@ -14,4 +14,8 @@ float32[2]  drivevel
 int32       status
 int32       trackingdone
 int32       grounded
+int32       nearground
+int32       intransition
+int32       missiondone
+int32       takeoff
 float32     comptime

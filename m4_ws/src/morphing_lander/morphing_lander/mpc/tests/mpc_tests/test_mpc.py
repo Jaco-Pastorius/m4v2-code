@@ -217,7 +217,7 @@ def closed_loop_simulation():
         start_time = time.process_time()
 
         # get reference
-        x_ref,u_ref,tilt_vel,tracking_done = traj_jump_time(t)
+        x_ref,u_ref,tilt_vel,drive_vel,tracking_done = traj_jump_time(t)
 
         # get integral state
         ki = 2.0

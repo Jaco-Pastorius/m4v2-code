@@ -2,7 +2,6 @@ import numpy as np
 from scipy.interpolate import interp1d
 # import onnxruntime as ort
 from scipy.spatial.transform import Rotation as R
-from IPython import embed
 from morphing_lander.mpc.parameters import params_
 
 wheel_base   = params_.get('wheel_base')

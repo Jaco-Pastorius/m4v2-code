@@ -3,56 +3,73 @@ from acados_template import AcadosOcp
 import scipy.linalg
 import numpy as np
 from morphing_lander.mpc.parameters import params_
-from morphing_lander.mpc.dynamics import export_robot_model, export_discrete_robot_model, export_discrete_robot_model_with_int_action, export_robot_model_driving,export_hybrid_robot_model
+from morphing_lander.mpc.dynamics import export_robot_model
+from morphing_lander.mpc.dynamics import export_discrete_robot_model
+from morphing_lander.mpc.dynamics import export_discrete_robot_model_with_int_action
+from morphing_lander.mpc.dynamics import export_robot_model_driving
+from morphing_lander.mpc.dynamics import export_hybrid_robot_model
 
 # constraint variables
-u_max          = params_.get('u_max')
-v_max_absolute = params_.get('v_max_absolute')
+u_max                       = params_.get('u_max')
+v_max_absolute              = params_.get('v_max_absolute')
 
-# collocation parameters
-N_horizon = params_.get('N_horizon')
-T_horizon = params_.get('T_horizon')
+# collocation parameters in flight
+N_horizon                   = params_.get('N_horizon')
+T_horizon                   = params_.get('T_horizon')
 
-# cost function
-Q_mat          = params_.get('Q_mat')
-R_mat          = params_.get('R_mat')
-Q_mat_terminal = params_.get('Q_mat_terminal')
+# cost function in flight
+Q_mat                       = params_.get('Q_mat')
+R_mat                       = params_.get('R_mat')
+Q_mat_terminal              = params_.get('Q_mat_terminal')
+
+# collocatoin parameters near ground
+N_horizon_near_ground       = params_.get('N_horizon_near_ground')
+T_horizon_near_ground       = params_.get('T_horizon_near_ground')
+
+# cost function near ground
+Q_mat_near_ground           = params_.get('Q_mat_near_ground')
+R_mat_near_ground           = params_.get('R_mat_near_ground')
+Q_mat_terminal_near_ground  = params_.get('Q_mat_terminal_near_ground')
 
 # integral term cost
-w_int          = params_.get('w_int')
-gamma          = params_.get('gamma')
+w_int                       = params_.get('w_int')
+gamma                       = params_.get('gamma')
 
 # residual learning parameters
-model_ninputs  = params_.get('model_ninputs')
+use_residual_model          = params_.get('use_residual_model')
+l4c_residual_model          = params_.get('l4c_residual_model')
+model_ninputs               = params_.get('model_ninputs')
 
 # temporary references (these get overwritten the first time mpc is called)
-x_ref = np.zeros(12,dtype='float')
-u_ref = np.zeros(4,dtype='float')
-x0    = np.zeros(12,dtype='float')
-varphi0 = 0.0
-grounded0 = True
+x_ref                       = np.zeros(12,dtype='float')
+u_ref                       = np.zeros(4,dtype='float')
+x0                          = np.zeros(12,dtype='float')
+varphi0                     = 0.0
+grounded0                   = True
 
 # export directory
-acados_ocp_path = params_.get('acados_ocp_path')
-acados_ocp_path_driving = params_.get('acados_ocp_path_driving')
-acados_ocp_path_hybrid = params_.get('acados_ocp_path_hybrid')
+acados_ocp_path             = params_.get('acados_ocp_path')
+acados_ocp_path_near_ground = params_.get('acados_ocp_path_near_ground')
+acados_ocp_path_driving     = params_.get('acados_ocp_path_driving')
+acados_ocp_path_hybrid      = params_.get('acados_ocp_path_hybrid')
 
-# l4casadi
-use_residual_model = params_.get('use_residual_model')
-l4c_residual_model = params_.get('l4c_residual_model')
+# driving parameters
+max_drive_speed             = params_.get('max_drive_speed')
+max_turn_speed              = params_.get('max_turn_speed')
 
-# driving
-max_drive_speed = params_.get('max_drive_speed')
-max_turn_speed  = params_.get('max_turn_speed')
-Q_mat_driving          = params_.get('Q_mat_driving')
-R_mat_driving          = params_.get('R_mat_driving')
-Q_mat_terminal_driving = params_.get('Q_mat_terminal_driving')
-N_horizon_driving     = params_.get('N_horizon_driving')
-T_horizon_driving     = params_.get('T_horizon_driving')
-x_ref_driving = np.zeros(3,dtype='float')
-u_ref_driving = np.zeros(2,dtype='float')
-x0_driving    = np.zeros(3,dtype='float')
+# driving cost function
+Q_mat_driving               = params_.get('Q_mat_driving')
+R_mat_driving               = params_.get('R_mat_driving')
+Q_mat_terminal_driving      = params_.get('Q_mat_terminal_driving')
 
+# driving collocation parameters
+N_horizon_driving           = params_.get('N_horizon_driving')
+T_horizon_driving           = params_.get('T_horizon_driving')
+
+# driving initial references
+x_ref_driving               = np.zeros(3,dtype='float')
+u_ref_driving               = np.zeros(2,dtype='float')
+x0_driving                  = np.zeros(3,dtype='float')
 
 def create_ocp_solver_description() -> AcadosOcp:
     # create ocp object to formulate the OCP
@@ -106,9 +123,8 @@ def create_ocp_solver_description() -> AcadosOcp:
     
     # set options
     ocp.solver_options.qp_solver       = "FULL_CONDENSING_HPIPM"       # FULL_CONDENSING_QPOASES
-    ocp.solver_options.hessian_approx  = "GAUSS_NEWTON"                # 'GAUSS_NEWTON', 'EXACT'
-    # ocp.solver_options.integrator_type = "ERK"                         # IRK
-    ocp.solver_options.integrator_type ="DISCRETE"
+    ocp.solver_options.hessian_approx  = "GAUSS_NEWTON"                # GAUSS_NEWTON, EXACT
+    ocp.solver_options.integrator_type = "DISCRETE"                    # ERK      
     ocp.solver_options.nlp_solver_type = "SQP_RTI"                     # SQP_RTI, SQP
 
     # set prediction horizon
@@ -116,6 +132,70 @@ def create_ocp_solver_description() -> AcadosOcp:
 
     # export directory
     ocp.code_export_directory = acados_ocp_path
+
+    return ocp
+
+def create_ocp_solver_description_near_ground() -> AcadosOcp:
+    # create ocp object to formulate the OCP
+    ocp = AcadosOcp()
+
+    # model = export_robot_model()
+    model = export_discrete_robot_model(T_horizon_near_ground/N_horizon_near_ground)
+
+    ocp.model = model
+    nx = model.x.size()[0]
+    nu = model.u.size()[0]
+    ny = nx + nu
+
+    # set dimensions
+    ocp.dims.N = N_horizon_near_ground
+
+    ocp.cost.cost_type = "LINEAR_LS"
+    ocp.cost.cost_type_e = "LINEAR_LS"
+
+    ny = nx + nu
+    ny_e = nx
+
+    ocp.cost.W_e = Q_mat_terminal_near_ground
+    ocp.cost.W = scipy.linalg.block_diag(Q_mat_near_ground, R_mat_near_ground)
+
+    ocp.cost.Vx = np.zeros((ny, nx))
+    ocp.cost.Vx[:nx, :nx] = np.eye(nx)
+
+    Vu = np.zeros((ny, nu))
+    Vu[nx : nx + nu, 0:nu] = np.eye(nu)
+    ocp.cost.Vu = Vu
+
+    ocp.cost.Vx_e = np.eye(nx)
+
+    ocp.cost.yref = np.hstack((x_ref,u_ref))
+    ocp.cost.yref_e = x_ref
+
+    # set constraints
+    ocp.constraints.lbu = np.array([0,0,0,0])
+    ocp.constraints.ubu = np.array([+u_max,+u_max,+u_max,+u_max])
+    ocp.constraints.idxbu = np.array([0,1,2,3])
+    
+    ocp.constraints.x0 = x0
+
+    # parameters
+    if use_residual_model:
+        l4c_params = l4c_residual_model.get_params(np.zeros((1, model_ninputs)))
+        ocp.parameter_values = np.hstack((np.array(varphi0),l4c_params.squeeze()))
+    else:
+        ocp.parameter_values = np.array([varphi0])
+    
+    # set options
+    ocp.solver_options.qp_solver       = "FULL_CONDENSING_HPIPM"       # FULL_CONDENSING_QPOASES
+    ocp.solver_options.hessian_approx  = "GAUSS_NEWTON"                # 'GAUSS_NEWTON', 'EXACT'
+    ocp.solver_options.integrator_type = "DISCRETE"                    # ERK
+    ocp.solver_options.nlp_solver_type = "SQP_RTI"                     # SQP_RTI, SQP
+
+    # set prediction horizon
+    ocp.solver_options.tf = T_horizon_near_ground
+
+    # export directory
+    ocp.code_export_directory = acados_ocp_path_near_ground
 
     return ocp
 
