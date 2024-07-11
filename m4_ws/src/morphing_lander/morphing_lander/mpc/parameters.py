@@ -6,8 +6,8 @@ params_ = {}
 
 # high level parameters
 params_['Ts']                    = 0.007                          # control frequency of MPC
-params_['Ts_tilt_controller']    = params_.get('Ts')              # control frequency of TiltController
-params_['Ts_drive_controller']   = params_.get('Ts')              # control frequency of DriveController
+params_['Ts_tilt_controller']    = 0.1                            # control frequency of TiltController
+params_['Ts_drive_controller']   = 0.1                            # control frequency of DriveController
 params_['queue_size']            = 1                              # queue size of ros2 messages
 params_['warmup_time']           = 1.0                            # time after which mpc controller is started (seconds)
 
@@ -70,6 +70,10 @@ params_['acados_sim_path_driving']       = getenv("HOME") +'/m4v2-code/m4_ws/src
 # paths hybrid model
 params_['acados_ocp_path_hybrid']        = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados/acados_models_hybrid/'
 params_['acados_sim_path_hybrid']        = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados/acados_sims_hybrid/'
+
+# roboclaw addresses
+params_['tilt_roboclaw_address']         = "/dev/ttyACM1"
+params_['drive_roboclaw_address']        = "/dev/ttyACM0"
 
 # gazebo real time factor
 params_['real_time_factor']              = 1.0

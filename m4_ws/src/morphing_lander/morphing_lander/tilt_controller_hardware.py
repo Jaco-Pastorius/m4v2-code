@@ -13,9 +13,11 @@ from morphing_lander.mpc.TiltControllerBase import TiltControllerBase
 from morphing_lander.mpc.roboclaw_3 import Roboclaw
 from morphing_lander.mpc.parameters import params_
 
-min  = params_['min']
-max  = params_['max']
-dead = params_['dead']
+min                    = params_['min']
+max                    = params_['max']
+dead                   = params_['dead']
+Ts                     = params_.get('Ts_tilt_controller')
+tilt_roboclaw_address  = params_.get('tilt_roboclaw_address')
 
 class TiltHardware(TiltControllerBase):
     def __init__(self):
@@ -42,7 +44,7 @@ class TiltHardware(TiltControllerBase):
 
         # Initialize roboclaw at given address
         self.address = 0x80
-        self.rc = Roboclaw("/dev/ttyACM1",115200)
+        self.rc = Roboclaw(tilt_roboclaw_address,115200)
         self.rc.Open()
 
         # Set encoder count to zero (always start robot in drive configuration)
