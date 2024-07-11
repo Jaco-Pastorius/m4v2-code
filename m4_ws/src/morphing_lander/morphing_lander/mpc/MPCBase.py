@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 
 # Numpy imports
 import numpy as np
+import scipy.linalg
 
 # Python imports
 import os 
@@ -65,6 +66,12 @@ m                           = params_.get('m')
 gravity                     = params_.get('g')
 u_ref_near_ground           = params_.get('u_ref_near_ground')
 u_ramp_down_rate            = params_.get('u_ramp_down_rate')
+# Q_mat                       = params_.get('Q_mat')
+# R_mat                       = params_.get('R_mat')
+# Q_mat_terminal              = params_.get('Q_mat_terminal')
+# Q_mat_near_ground           = params_.get('Q_mat_near_ground')
+# R_mat_near_ground           = params_.get('R_mat_near_ground')
+# Q_mat_terminal_near_ground  = params_.get('Q_mat_terminal_near_ground')
 
 class MPCBase(Node,ABC): 
     def __init__(self):
@@ -593,6 +600,17 @@ class MPCBase(Node,ABC):
     @abstractmethod
     def publish_actuator_motors(self):
         pass
+
+
+    # # adapt cost function according to tilt angle
+    # alpha = np.cos(self.tilt_angle)
+    # Q_  = alpha * Q_mat + (1-alpha) * Q_mat_near_ground
+    # R_  = alpha * R_mat + (1-alpha) * R_mat_near_ground
+    # # Qt_ = alpha * Q_mat_terminal + (1-alpha) * Q_mat_terminal_near_ground
+    # for j in range(N_horizon):
+    #     self.acados_ocp_solver.cost_set(j, "W", scipy.linalg.block_diag(Q_, R_))
+    #     # self.acados_ocp_solver.cost_set(j, "W_e", Qt_)
+
 
     # update yref and parameters
     # for j in range(N_horizon):
