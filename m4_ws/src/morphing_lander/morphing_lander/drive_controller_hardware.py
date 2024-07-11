@@ -6,7 +6,7 @@ from px4_msgs.msg import InputRc
 from std_msgs.msg import Int32
 
 # roboclaw and jetson
-from m4_base.roboclaw_3 import Roboclaw
+from morphing_lander.mpc.roboclaw_3 import Roboclaw
 
 class DriveController(Node):
     def __init__(self):
