@@ -263,7 +263,7 @@ class MPCBase(Node,ABC):
             if mpc_flag: 
                 if self.in_transition:
                     if use_rl_for_transition:
-                        u_opt,tilt_vel,comp_time = self.rl_update(self,x_current_rl,phi_current)
+                        u_opt,tilt_vel,comp_time = self.rl_update(x_current_rl,phi_current)
                         x_next = np.zeros(12)
                     else:
                         # overwrite u_ref with a the desired near ground thrust

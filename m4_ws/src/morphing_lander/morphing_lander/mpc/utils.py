@@ -1,6 +1,5 @@
 import numpy as np
 from scipy.interpolate import interp1d
-import onnxruntime as ort
 from scipy.spatial.transform import Rotation as R
 from morphing_lander.mpc.parameters import params_
 
@@ -72,52 +71,3 @@ def theta_fit(varphi):
     # theta as a function of varphi fit from matlab kinematics script
     return -0.5988*varphi**4 + 1.55*varphi**3 - 1.69*varphi**2 + 0.3304*varphi + 1.439
 
-class ONNXModel:
-   def __init__(self, model_path):
-       self.model = ort.InferenceSession(model_path)
-
-   def preprocess_obs(self,x_current,phi_current):
-        # obs shape should be :  (1, 19)
-        # obs type should be  :  <class 'numpy.ndarray'>
-        
-        pos_transformed        = np.array([x_current[0], -x_current[1],-x_current[2]])
-        
-        # quat                   = R.from_euler('zyx', [x_current[3],x_current[4],x_current[5]]).as_quat()
-        quat = x_current[3:7]
-        quat_transformed       = np.array([quat[0], -quat[1], -quat[2], quat[3]])
-
-        # quat_transformed       = np.array([quat[0], -quat[1], -quat[2], quat[3]])
-        vel_transformed        = np.array([x_current[7],-x_current[8],-x_current[9]])
-        rotvel_transformed     = np.array([x_current[10], -x_current[11], -x_current[12]])
-        x_current_transformed  = np.hstack((pos_transformed,quat_transformed,vel_transformed,rotvel_transformed))
-        obs = np.hstack((x_current_transformed, np.array([phi_current])/(np.pi/2)))
-        obs = obs[np.newaxis,:]
-        # print obs
-        print(f"obs :  {obs}")
-        return obs.astype(np.float32)
-    
-   def predict(self, obs):
-       outputs = self.model.run(
-           None,
-           {"obs": obs},
-       )
-       return outputs
-   
-   def postprocess_actions(self, outputs):
-       new_outputs = np.zeros((1, 3, 5), dtype=np.float32)
-       new_outputs[0][0][0] = np.clip(outputs[0][0][0], -1, 1)
-       new_outputs[0][0][1] = np.clip(outputs[0][0][1], -1, 1)
-       new_outputs[0][0][2] = np.clip(outputs[0][0][2], -1, 1)
-       new_outputs[0][0][3] = np.clip(outputs[0][0][3], -1, 1)
-       new_outputs[0][0][4] = np.clip(outputs[0][0][4], -1, 1)
-       
-       new_outputs[0][0][0] = (new_outputs[0][0][0] + 1) / 2
-       new_outputs[0][0][1] = (new_outputs[0][0][1] + 1) / 2
-       new_outputs[0][0][2] = (new_outputs[0][0][2] + 1) / 2
-       new_outputs[0][0][3] = (new_outputs[0][0][3] + 1) / 2
-       # fifth action : set to 0 if between -0.25 and 0.25, if higher than 0.25 set to 1, if lower than -0.25 set to -1
-       new_outputs[0][0][4] = 0 if -0.25 < new_outputs[0][0][4] < 0.25 else np.sign(new_outputs[0][0][4])
-    #    print(f"new_outputs : {new_outputs}")
-    #    test = new_outputs[0][0].squeeze()
-    #    print(f"new_outputs 1  : {test}")
-       return new_outputs[0][0].squeeze()
