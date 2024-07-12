@@ -90,6 +90,7 @@ class MPCHardware(MPCBase):
         v = msg.velocity
         o = msg.angular_velocity
         self.state = array([p[0],p[1],p[2],psi,th,phi,v[0],v[1],v[2],o[0],o[1],o[2]])
+        self.state_rl = array([p[0],p[1],p[2],msg.q[1],msg.q[2],msg.q[3],msg.q[0],v[0],v[1],v[2],o[0],o[1],o[2]])
 
     def rc_listener_callback(self, msg):
         if (msg.values[8] == self.max):

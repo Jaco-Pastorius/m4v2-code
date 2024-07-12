@@ -115,6 +115,7 @@ class MPCBase(Node,ABC):
 
         # robot state
         self.state            = np.zeros(12)
+        self.state_rl         = np.zeros(13)
         self.integral_state   = 0.0
         self.u_opt_prev       = np.zeros(4)
 
