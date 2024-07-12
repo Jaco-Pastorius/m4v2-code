@@ -147,11 +147,18 @@ class MPCSim(MPCBase):
         self.state[3] = psi
         self.state[4] = th
         self.state[5] = phi
+        self.state_rl[3] = msg.q[1]
+        self.state_rl[4] = msg.q[2]
+        self.state_rl[5] = msg.q[3]
+        self.state_rl[6] = msg.q[0]
 
     def vehicle_angular_velocity_groundtruth_callback(self, msg): 
         self.state[9]  = msg.xyz[0]
         self.state[10] = msg.xyz[1]
         self.state[11] = msg.xyz[2]
+        self.state_rl[10] = msg.xyz[0]
+        self.state_rl[11] = msg.xyz[1]
+        self.state_rl[12] = msg.xyz[2]
 
     def manual_control_setpoint_callback(self, msg): 
         self.input[0]  = max_dx * msg.pitch
