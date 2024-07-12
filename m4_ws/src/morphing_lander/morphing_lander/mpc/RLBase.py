@@ -167,6 +167,7 @@ class RLBase(Node,ABC):
 
             # get current state and tilt angle (self.state is updated by odometry callback)
             x_current   = np.copy(self.state) 
+            x_current_rl = np.copy(self.state_rl)
             phi_current = np.copy(self.tilt_angle) 
 
             # update reference (make sure reference starts from ground and ends on ground)
