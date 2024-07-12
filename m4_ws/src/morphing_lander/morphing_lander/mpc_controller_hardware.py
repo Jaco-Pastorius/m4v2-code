@@ -72,7 +72,7 @@ class MPCHardware(MPCBase):
         x_ref[8] = self.input[2]
 
         if not self.mission_done:
-            if self.takeoff_flag and abs(self.state[2]) < abs(tilt_height) and self.state[8] > 0.05:
+            if self.takeoff_flag and abs(self.state[2]) < abs(tilt_height):
                 tilt_vel = 1.0
             else:
                 tilt_vel = -1.0
