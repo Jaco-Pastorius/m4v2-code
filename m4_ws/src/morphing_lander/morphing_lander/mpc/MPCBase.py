@@ -282,9 +282,6 @@ class MPCBase(Node,ABC):
                 x_next = np.zeros(12)
 
             self.u_opt_prev = np.copy(u_opt)
-    
-            # print u_opt_prev
-            print(f"u_opt_prev: {self.u_opt_prev}")
 
             # publish control inputs
             self.publish_actuator_motors(u_opt)
@@ -480,7 +477,7 @@ class MPCBase(Node,ABC):
         comp_time = time.process_time() - start_time
         print("* comp time = %5g seconds\n" % (comp_time))
         
-        return u_opt, tilt_vel, comp_time
+        return u_opt, float(tilt_vel), comp_time
 
     # detector methods
     def ground_detector(self,x_current):

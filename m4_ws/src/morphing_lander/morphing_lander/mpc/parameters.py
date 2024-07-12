@@ -57,8 +57,8 @@ params_ = {}
 
 # high level parameters
 params_['Ts']                    = 0.007                          # control frequency of MPC
-params_['Ts_tilt_controller']    = 0.1                            # control frequency of TiltController
-params_['Ts_drive_controller']   = 0.1                            # control frequency of DriveController
+params_['Ts_tilt_controller']    = 0.007                          # control frequency of TiltController
+params_['Ts_drive_controller']   = 0.007                          # control frequency of DriveController
 params_['queue_size']            = 1                              # queue size of ros2 messages
 params_['warmup_time']           = 1.0                            # time after which mpc controller is started (seconds)
 
@@ -83,7 +83,7 @@ params_['h_bot_pivot']           = 0.10                           # distance fro
 params_['z_base_ground']         = -0.0                           # (exp: ? TBD) height that optitrack registers when robot is on ground with arms at 0 degrees
 params_['h_wheel_ground']        = -0.20                          # distance from wheel to ground when transition begins
 params_['near_ground_height']    = params_.get('h_wheel_ground') + params_.get('z_base_ground') - (params_.get('l_pivot_wheel') * np.cos(params_.get('max_tilt_in_flight')) - params_.get('h_bot_pivot'))                
-# params_['near_ground_height']    = 1.0                
+# params_['near_ground_height']    = 0.5                
 params_['u_ref_near_ground']     = 0.8                            # reference input near ground
 params_['u_ramp_down_rate']      = 0.05                           # rate at which reference input ramps down
 
