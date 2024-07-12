@@ -27,6 +27,7 @@ params_['max_tilt_in_flight']    = np.deg2rad(60)
 params_['max_tilt_on_land']      = np.deg2rad(85)
 
 # transition parameters
+params_['use_rl_for_transition'] = False
 params_['l_pivot_wheel']         = 0.26                           # distance from pivot point to wheel exterior
 params_['h_bot_pivot']           = 0.10                           # distance from bottom plate to pivot point
 params_['z_base_ground']         = -0.0                           # (exp: ? TBD) height that optitrack registers when robot is on ground with arms at 0 degrees

@@ -33,6 +33,7 @@ from morphing_lander.mpc.mpc                 import create_ocp_solver_descriptio
 from morphing_lander.mpc.mpc                 import create_ocp_solver_description_near_ground
 from morphing_lander.mpc.mpc                 import create_ocp_solver_description_with_int
 from morphing_lander.mpc.trajectories        import traj_jump_time 
+from morphing_lander.mpc.utils               import euler_from_quaternion
 from morphing_lander.mpc.parameters          import params_
 
 # Get parameters
@@ -67,6 +68,7 @@ gravity                     = params_.get('g')
 u_ref_near_ground           = params_.get('u_ref_near_ground')
 u_ramp_down_rate            = params_.get('u_ramp_down_rate')
 rl_model                    = params_.get('rl_model')
+use_rl_for_transition       = params_.get('use_rl_for_transition')
 # Q_mat                       = params_.get('Q_mat')
 # R_mat                       = params_.get('R_mat')
 # Q_mat_terminal              = params_.get('Q_mat_terminal')
@@ -260,12 +262,16 @@ class MPCBase(Node,ABC):
             # run mpc
             if mpc_flag: 
                 if self.in_transition:
-                    # overwrite u_ref with a the desired near ground thrust
-                    self.u_ref_star = np.clip(self.u_ref_star - Ts*u_ramp_down_rate,0.0,1.0)
-                    u_ref = self.u_ref_star * np.ones(4)
+                    if use_rl_for_transition:
+                        u_opt,tilt_vel,comp_time = self.rl_update(self,x_current_rl,phi_current)
+                        x_next = np.zeros(12)
+                    else:
+                        # overwrite u_ref with a the desired near ground thrust
+                        self.u_ref_star = np.clip(self.u_ref_star - Ts*u_ramp_down_rate,0.0,1.0)
+                        u_ref = self.u_ref_star * np.ones(4)
 
-                    # run the near ground mpc
-                    u_opt,x_next,comp_time = self.mpc_update_near_ground(x_current,phi_current,x_ref,u_ref)
+                        # run the near ground mpc
+                        u_opt,x_next,comp_time = self.mpc_update_near_ground(x_current,phi_current,x_ref,u_ref)
                 else:
                     # run the in flight mpc
                     u_opt,x_next,comp_time = self.mpc_update(x_current,phi_current,x_ref,u_ref)
@@ -451,6 +457,30 @@ class MPCBase(Node,ABC):
         print("* comp time = %5g seconds\n" % (comp_time))
 
         return u_opt, x_next[:-1], comp_time
+    
+    def rl_update(self,x_current_rl,phi_current):
+        start_time = time.process_time()
+
+        # transform state and input for rl
+        obs = rl_model.preprocess_obs(x_current_rl,phi_current)
+
+        # advance rl
+        outputs = rl_model.predict(obs)
+
+        # get control inputs
+        u_rl = rl_model.postprocess_actions(outputs)
+
+        # get desired tilt velocity
+        tilt_vel = u_rl[-1].astype(np.float32) 
+
+        # get control input for px4
+        u_opt = u_rl[:-1]
+
+        # print computation time
+        comp_time = time.process_time() - start_time
+        print("* comp time = %5g seconds\n" % (comp_time))
+        
+        return u_opt, tilt_vel, comp_time
 
     # detector methods
     def ground_detector(self,x_current):
