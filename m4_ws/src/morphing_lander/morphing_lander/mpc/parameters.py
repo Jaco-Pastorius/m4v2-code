@@ -1,5 +1,6 @@
 import numpy as np
 from os import getenv
+from morphing_lander.mpc.utils import ONNXModel
 
 # declare parameter dictionary
 params_ = {}
@@ -70,6 +71,9 @@ params_['acados_sim_path_driving']       = getenv("HOME") +'/m4v2-code/m4_ws/src
 # paths hybrid model
 params_['acados_ocp_path_hybrid']        = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados/acados_models_hybrid/'
 params_['acados_sim_path_hybrid']        = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados/acados_sims_hybrid/'
+
+# path of RL model
+params_['rl_model']                      = ONNXModel(getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/rl/MorphingLander.onnx')
 
 # roboclaw addresses
 params_['tilt_roboclaw_address']         = "/dev/ttyACM1"
