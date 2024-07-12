@@ -135,7 +135,13 @@ class MPCSim(MPCBase):
         self.state[6] = msg.vx
         self.state[7] = msg.vy
         self.state[8] = msg.vz
-
+        self.state_rl[0] = msg.x
+        self.state_rl[1] = msg.y
+        self.state_rl[2] = msg.z
+        self.state_rl[7] = msg.vx
+        self.state_rl[8] = msg.vy
+        self.state_rl[9] = msg.vz
+        
     def vehicle_attitude_groundtruth_callback(self, msg): 
         phi,th,psi = euler_from_quaternion([msg.q[1],msg.q[2],msg.q[3],msg.q[0]])
         self.state[3] = psi
