@@ -11,20 +11,13 @@ class DriveControllerSim(DriveControllerBase):
     def update():
         pass
 
-
 def main(args=None):
-    try:
-        rclpy.init(args=args)
-        drive_controller = DriveControllerSim()
-        drive_controller.get_logger().info("Starting drive_controller_sim...")
-        rclpy.spin(drive_controller)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        drive_controller.on_shutdown()  # do any custom cleanup
-        drive_controller.destroy_node()
-        rclpy.shutdown()
-
+    rclpy.init(args=args)
+    print("Spinning DriveSim node \n")
+    drive_sim = DriveControllerSim()
+    rclpy.spin(drive_sim)
+    drive_sim.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

@@ -33,7 +33,7 @@ from morphing_lander.mpc.mpc                 import create_ocp_solver_descriptio
 from morphing_lander.mpc.mpc                 import create_ocp_solver_description_near_ground
 from morphing_lander.mpc.mpc                 import create_ocp_solver_description_with_int
 from morphing_lander.mpc.trajectories        import traj_jump_time 
-from morphing_lander.mpc.utils               import euler_from_quaternion
+from morphing_lander.mpc.utils               import euler_from_quaternion, z_schedule
 from morphing_lander.mpc.parameters          import params_
 
 # Get parameters
@@ -65,16 +65,16 @@ near_ground_height          = params_.get('near_ground_height')
 T_max                       = params_.get('T_max')
 m                           = params_.get('m')
 gravity                     = params_.get('g')
-u_ref_near_ground           = params_.get('u_ref_near_ground')
 u_ramp_down_rate            = params_.get('u_ramp_down_rate')
 rl_model                    = params_.get('rl_model')
 use_rl_for_transition       = params_.get('use_rl_for_transition')
-# Q_mat                       = params_.get('Q_mat')
-# R_mat                       = params_.get('R_mat')
-# Q_mat_terminal              = params_.get('Q_mat_terminal')
-# Q_mat_near_ground           = params_.get('Q_mat_near_ground')
-# R_mat_near_ground           = params_.get('R_mat_near_ground')
-# Q_mat_terminal_near_ground  = params_.get('Q_mat_terminal_near_ground')
+Q_mat                       = params_.get('Q_mat')
+R_mat                       = params_.get('R_mat')
+Q_mat_terminal              = params_.get('Q_mat_terminal')
+Q_mat_near_ground           = params_.get('Q_mat_near_ground')
+R_mat_near_ground           = params_.get('R_mat_near_ground')
+Q_mat_terminal_near_ground  = params_.get('Q_mat_terminal_near_ground')
+cost_update_freq            = params_.get('cost_update_freq')
 
 class MPCBase(Node,ABC): 
     def __init__(self):
@@ -134,8 +134,9 @@ class MPCBase(Node,ABC):
         self.current_time     = 0.0
         self.dt               = 0.0
 
-        # counter
+        # counters
         self.counter = 0
+        self.cost_update_counter = 0
 
         # compile acados solver flight (ocp)
         ocp  = create_ocp_solver_description()
@@ -159,29 +160,6 @@ class MPCBase(Node,ABC):
                 self.acados_ocp_solver.set(stage, "p", np.array([0.0]))
         for stage in range(N_horizon):
             self.acados_ocp_solver.set(stage, "u", np.zeros(4))
-
-        # compile acados solver near ground (ocp)
-        ocp_near_ground = create_ocp_solver_description_near_ground()
-        self.acados_ocp_solver_near_ground = AcadosOcpSolver(
-            ocp_near_ground, 
-            json_file=os.path.join(acados_ocp_path_near_ground, ocp_near_ground.model.name + '_acados_ocp_near_ground.json'),
-            generate =generate_mpc,
-            build    =build_mpc
-        )
-
-        # solver initialization
-        for stage in range(N_horizon + 1):
-            self.acados_ocp_solver_near_ground.set(stage, "x", np.zeros(12))
-            if use_residual_model:
-                l4c_params = l4c_residual_model.get_params(np.zeros((1,model_ninputs)))
-                self.acados_ocp_solver.set(stage, "p", np.hstack((np.array([0.0]),l4c_params.squeeze())))
-            else:
-                self.acados_ocp_solver_near_ground.set(stage, "p", np.array([max_tilt_in_flight]))
-        for stage in range(N_horizon):
-            self.acados_ocp_solver_near_ground.set(stage, "u", u_ref_near_ground*np.ones(4))
-
-        # call once to be warmed up
-        self.mpc_update_near_ground(np.zeros(12),0.0,np.zeros(12),u_ref_near_ground*np.ones(4))
 
     # timer callback
     def timer_callback(self):
@@ -217,9 +195,9 @@ class MPCBase(Node,ABC):
             if self.time_initialized: self.advance_time()
 
             # get current state and tilt angle (self.state is updated by odometry callback)
-            x_current   = np.copy(self.state) 
+            x_current    = np.copy(self.state) 
             x_current_rl = np.copy(self.state_rl)
-            phi_current = np.copy(self.tilt_angle) 
+            phi_current  = np.copy(self.tilt_angle) 
 
             # # update reference (make sure reference starts from ground and ends on ground)
             # x_ref,u_ref,tilt_vel,drive_vel,tracking_done = traj_jump_time(self.current_time)
@@ -228,6 +206,10 @@ class MPCBase(Node,ABC):
             tracking_done = False
             drive_vel     = [0.0,0.0]
             x_ref,u_ref,tilt_vel,drive_vel = self.get_reference()
+
+            # write drive velocity to class members
+            self.drive_speed = drive_vel[0]
+            self.turn_speed  = drive_vel[1]
 
             # update integral state
             self.integral_state += Ts * integral_gain * (x_current[2]-x_ref[2])
@@ -249,8 +231,6 @@ class MPCBase(Node,ABC):
                 u_opt            = np.zeros(4,dtype='float')
                 tilt_vel         = u_max
                 mpc_flag         = False   
-                self.drive_speed = drive_vel[0]
-                self.turn_speed  = drive_vel[1]
                 # self.disarm()
 
             # check if robot is near ground
@@ -260,26 +240,29 @@ class MPCBase(Node,ABC):
             self.in_transition_detector(near_ground_flag)
 
             # run mpc
+            f_z,alpha = 1.0,1.0
             if mpc_flag: 
-                if self.in_transition:
-                    if use_rl_for_transition:
-                        u_opt,tilt_vel,comp_time = self.rl_update(x_current_rl,phi_current)
-                        x_next = np.zeros(12)
-                    else:
-                        # overwrite u_ref with a the desired near ground thrust
+                # adapt the cost function based on the tilt angle and height but only if robot has taken off
+                if self.takeoff_flag:
+                    f_z   = z_schedule(x_current[2],near_ground_height,1.0)
+                    alpha = f_z * np.cos(self.tilt_angle)
+
+                if self.in_transition and use_rl_for_transition:
+                    u_opt,tilt_vel,comp_time = self.rl_update(x_current_rl,phi_current)
+                    x_next = np.zeros(12)
+                else: 
+                    if self.in_transition:
+                        # overwrite u_ref with the desired near ground thrust
                         self.u_ref_star = np.clip(self.u_ref_star - Ts*u_ramp_down_rate,0.0,1.0)
                         u_ref = self.u_ref_star * np.ones(4)
-
-                        # run the near ground mpc
-                        u_opt,x_next,comp_time = self.mpc_update_near_ground(x_current,phi_current,x_ref,u_ref)
-                else:
-                    # run the in flight mpc
-                    u_opt,x_next,comp_time = self.mpc_update(x_current,phi_current,x_ref,u_ref)
+                    # run mpc
+                    u_opt,x_next,comp_time = self.mpc_update(x_current,phi_current,x_ref,u_ref,alpha)
                     # u_opt,x_next,comp_time = self.mpc_update_with_int(x_current,phi_current,x_ref,u_ref,self.integral_state)
             else:
                 u_opt = np.zeros(4,dtype='float')
                 comp_time = -1.0
                 x_next = np.zeros(12)
+                alpha = 0.0
 
             self.u_opt_prev = np.copy(u_opt)
 
@@ -320,10 +303,11 @@ class MPCBase(Node,ABC):
                              near_ground_flag,
                              self.in_transition,
                              self.mission_done,
-                             self.takeoff_flag)
+                             self.takeoff_flag,
+                             alpha)
 
     # log publisher
-    def publish_log(self,x,u,x_ref,u_ref,tilt_angle,tilt_vel,status,comptime,tracking_done,grounded_flag,x_next,near_ground_flag,in_transition,mission_done,takeoff_flag):
+    def publish_log(self,x,u,x_ref,u_ref,tilt_angle,tilt_vel,status,comptime,tracking_done,grounded_flag,x_next,near_ground_flag,in_transition,mission_done,takeoff_flag,alpha):
         msg = MPCStatus()
 
         msg.x = x.astype('float32')
@@ -332,6 +316,8 @@ class MPCBase(Node,ABC):
 
         msg.u = u.astype('float32')
         msg.uref = u_ref.astype('float32')
+
+        msg.alpha = alpha
 
         msg.varphi  = np.rad2deg(tilt_angle)
         msg.tiltvel = np.rad2deg(tilt_vel)
@@ -349,8 +335,20 @@ class MPCBase(Node,ABC):
         self.mpc_status_publisher_.publish(msg)
 
     # mpc update methods
-    def mpc_update(self,xcurrent,phicurrent,x_ref,u_ref):
+    def mpc_update(self,xcurrent,phicurrent,x_ref,u_ref,alpha):
         start_time = time.process_time()
+
+        # adapt cost function according to tilt angle at a cost update frequency
+        self.cost_update_counter += 1
+        if self.cost_update_counter % int(cost_update_freq/Ts) == 0:
+            Q_,R_,Qt_ = np.copy(Q_mat),np.copy(R_mat),np.copy(Q_mat_terminal)
+            Q_  = alpha * Q_mat + (1-alpha) * Q_mat_near_ground
+            R_  = alpha * R_mat + (1-alpha) * R_mat_near_ground
+            Qt_ = alpha * Q_mat_terminal + (1-alpha) * Q_mat_terminal_near_ground
+            for j in range(N_horizon):
+                self.acados_ocp_solver.cost_set(j, "W", scipy.linalg.block_diag(Q_, R_))
+            self.acados_ocp_solver.cost_set(N_horizon, "W", Qt_)
+            self.cost_update_counter = 0
 
         # set initial state constraint
         self.acados_ocp_solver.set(0, "lbx", xcurrent)
@@ -630,16 +628,6 @@ class MPCBase(Node,ABC):
     @abstractmethod
     def publish_actuator_motors(self):
         pass
-
-
-    # # adapt cost function according to tilt angle
-    # alpha = np.cos(self.tilt_angle)
-    # Q_  = alpha * Q_mat + (1-alpha) * Q_mat_near_ground
-    # R_  = alpha * R_mat + (1-alpha) * R_mat_near_ground
-    # # Qt_ = alpha * Q_mat_terminal + (1-alpha) * Q_mat_terminal_near_ground
-    # for j in range(N_horizon):
-    #     self.acados_ocp_solver.cost_set(j, "W", scipy.linalg.block_diag(Q_, R_))
-    #     # self.acados_ocp_solver.cost_set(j, "W_e", Qt_)
 
 
     # update yref and parameters

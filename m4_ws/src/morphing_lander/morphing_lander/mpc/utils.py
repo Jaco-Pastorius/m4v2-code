@@ -71,3 +71,11 @@ def theta_fit(varphi):
     # theta as a function of varphi fit from matlab kinematics script
     return -0.5988*varphi**4 + 1.55*varphi**3 - 1.69*varphi**2 + 0.3304*varphi + 1.439
 
+def z_schedule(z,zstar,eps):
+    z,zstar,eps = abs(z),abs(zstar),abs(eps)
+    if z >= (1+eps)*zstar:
+        return 1.0
+    elif zstar <= z <= (1+eps)*zstar:
+        return 1 - zstar/z
+    else:
+        return 0.0

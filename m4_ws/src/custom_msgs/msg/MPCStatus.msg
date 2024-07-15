@@ -7,6 +7,8 @@ float32[12] xnext
 float32[4]  u
 float32[4]  uref
 
+float32 alpha
+
 float32     varphi
 float32     tiltvel
 float32[2]  drivevel

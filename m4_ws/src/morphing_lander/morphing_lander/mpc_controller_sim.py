@@ -91,6 +91,9 @@ class MPCSim(MPCBase):
                 tilt_vel = 1.0
             else:
                 tilt_vel = -1.0
+            if self.in_transition:
+                drive_vel[0] = self.input[0]
+                drive_vel[1] = self.input[1]    
         else:
             drive_vel[0] = self.input[0]
             drive_vel[1] = self.input[1]

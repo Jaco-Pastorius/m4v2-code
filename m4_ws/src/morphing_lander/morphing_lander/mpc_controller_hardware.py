@@ -50,7 +50,7 @@ class MPCHardware(MPCBase):
         self.mpc_switch      = False
 
         # control input
-        self.input = zeros(4) # vx, vy, vz, vtilt
+        self.input       = zeros(4) # vx, vy, vz, x
 
     def mpc_trigger(self):
         return self.mpc_switch
@@ -72,13 +72,16 @@ class MPCHardware(MPCBase):
         x_ref[8] = self.input[2]
 
         if not self.mission_done:
-            if self.takeoff_flag and abs(self.state[2]) < abs(tilt_height) and self.state[8] > 0.05:
+            if self.takeoff_flag and abs(self.state[2]) < abs(tilt_height):
                 tilt_vel = 1.0
             else:
                 tilt_vel = -1.0
+            if self.in_transition:
+                drive_vel[0] = self.input[0]/max_dx
+                drive_vel[1] = self.input[1]/max_dy
         else:
-            drive_vel[0] = self.input[0]
-            drive_vel[1] = self.input[1]
+            drive_vel[0] = self.input[0]/max_dx
+            drive_vel[1] = self.input[1]/max_dy
             tilt_vel = 1.0
 
         return x_ref, u_ref, tilt_vel, drive_vel
