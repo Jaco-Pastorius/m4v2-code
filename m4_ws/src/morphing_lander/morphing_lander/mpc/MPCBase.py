@@ -241,6 +241,7 @@ class MPCBase(Node,ABC):
 
             # run mpc
             f_z,alpha = 1.0,1.0
+            outputs = np.zeros(5)
             if mpc_flag: 
                 # adapt the cost function based on the tilt angle and height but only if robot has taken off
                 if self.takeoff_flag:
@@ -248,7 +249,7 @@ class MPCBase(Node,ABC):
                     alpha = f_z * np.cos(self.tilt_angle)
 
                 if self.in_transition and use_rl_for_transition:
-                    u_opt,tilt_vel,comp_time = self.rl_update(x_current_rl,phi_current)
+                    u_opt,tilt_vel,comp_time,outputs = self.rl_update(x_current_rl,phi_current)
                     x_next = np.zeros(12)
                 else: 
                     if self.in_transition:
@@ -304,10 +305,11 @@ class MPCBase(Node,ABC):
                              self.in_transition,
                              self.mission_done,
                              self.takeoff_flag,
-                             alpha)
+                             alpha,
+                             outputs)
 
     # log publisher
-    def publish_log(self,x,u,x_ref,u_ref,tilt_angle,tilt_vel,status,comptime,tracking_done,grounded_flag,x_next,near_ground_flag,in_transition,mission_done,takeoff_flag,alpha):
+    def publish_log(self,x,u,x_ref,u_ref,tilt_angle,tilt_vel,status,comptime,tracking_done,grounded_flag,x_next,near_ground_flag,in_transition,mission_done,takeoff_flag,alpha,outputs):
         msg = MPCStatus()
 
         msg.x = x.astype('float32')
@@ -321,6 +323,8 @@ class MPCBase(Node,ABC):
 
         msg.varphi  = np.rad2deg(tilt_angle)
         msg.tiltvel = np.rad2deg(tilt_vel)
+
+        msg.outputs = outputs.astype('float32')
 
         msg.status = status
         msg.comptime = comptime
@@ -475,7 +479,7 @@ class MPCBase(Node,ABC):
         comp_time = time.process_time() - start_time
         print("* comp time = %5g seconds\n" % (comp_time))
         
-        return u_opt, float(tilt_vel), comp_time
+        return u_opt, float(tilt_vel), comp_time, outputs
 
     # detector methods
     def ground_detector(self,x_current):

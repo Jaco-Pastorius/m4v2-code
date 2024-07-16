@@ -6,6 +6,7 @@ float32[12] xnext
 
 float32[4]  u
 float32[4]  uref
+float32[5]  outputs
 
 float32 alpha
 
