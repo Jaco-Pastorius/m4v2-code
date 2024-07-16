@@ -5,7 +5,7 @@ from rclpy.qos import qos_profile_sensor_data
 from px4_msgs.msg import InputRc
 
 # roboclaw and jetson
-from morphing_lander.mpc import DriveControllerBase
+from morphing_lander.mpc.DriveControllerBase import DriveControllerBase
 from morphing_lander.mpc.roboclaw_3 import Roboclaw
 from morphing_lander.mpc.parameters import params_
 
@@ -17,8 +17,8 @@ Ts                     = params_.get('Ts_drive_controller')
 drive_roboclaw_address = params_.get('drive_roboclaw_address')
 
 class DriveControllerHardware(DriveControllerBase):
-    def __init__(self):
-        super().__init__('drive_controller')
+    def __init__(self): 
+        super().__init__()
 
         self.subscription = self.create_subscription(
             InputRc,
@@ -44,7 +44,7 @@ class DriveControllerHardware(DriveControllerBase):
         self.turn_speed_in   = msg.values[0]
 
         # set manual or automatic control of tilt angle
-        if msg.values[7] == self.max:
+        if msg.values[7] == max:
             self.manual = False
         else:
             self.manual = True

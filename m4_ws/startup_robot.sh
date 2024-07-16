@@ -43,9 +43,9 @@ tmux select-pane -t 1
 # record.sh
 tmux send-keys -t robot:0.1 './record.sh' C-m
 
-# # Select pane 4
-# tmux select-pane -t 4
+# Select pane 4
+tmux select-pane -t 4
 
-# # launch drive controller
-# tmux send-keys -t robot:0.4 './launch_drive.sh' C-m
+# launch drive controller
+tmux send-keys -t robot:0.4 './launch_drive.sh' C-m
 
