@@ -517,7 +517,7 @@ class MPCBase(Node,ABC):
         return tilt_vel
 
     def limit_drive_vel(self,drive_vel,grounded_flag):
-        if not grounded_flag:
+        if (not self.in_transition) and not self.mission_done:
             drive_vel = [0.0,0.0]
         return drive_vel
 

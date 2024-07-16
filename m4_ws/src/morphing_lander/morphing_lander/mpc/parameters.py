@@ -74,21 +74,21 @@ params_['max_dz']                = 0.75                           # max z veloci
 params_['tilt_height']           = -1.0                           # height at which tilt is enabled
 
 # safety parameters
-params_['max_tilt_in_flight']    = np.deg2rad(60)
+params_['max_tilt_in_flight']    = np.deg2rad(50)
 params_['max_tilt_on_land']      = np.deg2rad(85)
 
 # transition parameters
 params_['use_rl_for_transition'] = False
 params_['l_pivot_wheel']         = 0.26                           # distance from pivot point to wheel exterior
 params_['h_bot_pivot']           = 0.10                           # distance from bottom plate to pivot point
-params_['z_base_ground']         = -0.0                           # (exp: -0.1177 TBD) height that optitrack registers when robot is on ground with arms at 0 degrees
+params_['z_base_ground']         = -0.113                         # (exp: -0.113 TBD) height that optitrack registers when robot is on ground with arms at 0 degrees
 params_['h_wheel_ground']        = -0.20                          # distance from wheel to ground when transition begins
 params_['near_ground_height']    = params_.get('h_wheel_ground') + params_.get('z_base_ground') - (params_.get('l_pivot_wheel') * np.sin(params_.get('max_tilt_in_flight')) - params_.get('h_bot_pivot'))                
-params_['u_ramp_down_rate']      = 0.05                           # rate at which reference input ramps down
+params_['u_ramp_down_rate']      = 0.15                           # rate at which reference input ramps down
 
 # state machine parameters
-params_['land_height']           = -0.0                          # (exp: -0.23, sim:-0.12) height at which we consider robot landed 
-params_['takeoff_height']        = -1.50                          # (exp: -0.60) height at which we consider robot in flight
+params_['land_height']           = -0.23                          # (exp: -0.23, sim:-0.12) height at which we consider robot landed 
+params_['takeoff_height']        = -1.0                           # (exp: -1.0) height at which we consider robot in flight
 
 # trajectory parameters
 params_['z0']                    = 0.0                            # (exp: -0.11)
@@ -196,9 +196,9 @@ params_['w_dz']       = 20.0    # exp: 10.0
 params_['w_phi']      = 0.1     # exp: 0.1
 params_['w_th']       = 0.1     # exp: 0.1
 params_['w_psi']      = 0.1     # exp: 0.1
-params_['w_ox']       = 1.5     # exp: 3.0
-params_['w_oy']       = 1.5     # exp: 5.0
-params_['w_oz']       = 1.5     # exp: 1.5
+params_['w_ox']       = 3.0     # exp: 3.0, sim: 1.5
+params_['w_oy']       = 5.0     # exp: 5.0, sim: 1.5
+params_['w_oz']       = 1.5     # exp: 1.5, sim: 1.5
 params_['w_u']        = 1.0     # exp: 1.0
 params_['rho']        = 0.1     # exp: 0.1
 params_['gamma']      = 1.0     # exp: 1.0

@@ -92,8 +92,8 @@ class DriveControllerHardware(DriveControllerBase):
 
         else:
             # automatic control of driving
-            lin_vel = self.map_speed(self.drive_speed)
-            ang_vel = self.map_speed(self.turn_speed)
+            lin_vel = -self.map_speed(self.drive_speed)
+            ang_vel = -self.map_speed(self.turn_speed)
             self.move_right_wheel(lin_vel + ang_vel)
             self.move_left_wheel(lin_vel - ang_vel)
 
