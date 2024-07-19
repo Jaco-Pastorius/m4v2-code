@@ -1,5 +1,5 @@
 # Numpy imports
-from numpy import pi, zeros
+from numpy import pi, zeros,clip, cos, sin, array
 
 # ROS imports
 import rclpy
@@ -25,7 +25,7 @@ v_max_absolute = params_['v_max_absolute']
 max_dx         = params_['max_dx']
 max_dy         = params_['max_dy']
 max_dz         = params_['max_dz']
-tilt_height    = params_['tilt_height']
+max_dpsi       = params_['max_dpsi']
 
 class MPCSim(MPCBase): 
     def __init__(self):
@@ -60,9 +60,6 @@ class MPCSim(MPCBase):
                                             qos_profile_sensor_data)
         self.manual_control_setpoint  # prevent unused variable warning
 
-        # control input
-        self.input = zeros(4) # vx, vy, vz, vtilt
-
     def mpc_trigger(self):
         mpc_flag = False
         self.counter += 1
@@ -72,34 +69,6 @@ class MPCSim(MPCBase):
         
     def offboard_mode_trigger(self):
         return True
-    
-    def get_reference(self):
-        drive_vel = [0.0,0.0]
-        x_ref = zeros(12)
-        u_ref = zeros(4)
-
-        x_ref[0] = self.state[0] + self.input[0]
-        x_ref[1] = self.state[1] + self.input[1]
-        x_ref[2] = self.state[2] + self.input[2]
-
-        x_ref[6] = self.input[0]
-        x_ref[7] = self.input[1]
-        x_ref[8] = self.input[2]
-
-        if not self.mission_done:
-            if self.takeoff_flag and abs(self.state[2]) < abs(tilt_height):
-                tilt_vel = 1.0
-            else:
-                tilt_vel = -1.0
-            if self.in_transition:
-                drive_vel[0] = self.input[0]
-                drive_vel[1] = self.input[1]    
-        else:
-            drive_vel[0] = self.input[0]
-            drive_vel[1] = self.input[1]
-            tilt_vel = 1.0
-
-        return x_ref, u_ref, tilt_vel, drive_vel
 
     def publish_actuator_motors(self,u):
         # publish to px4
@@ -117,7 +86,11 @@ class MPCSim(MPCBase):
         msg.control[5] = self.tilt_angle/(pi/2)
 
         # get normalized drive actions (m4 sdf is set up for 0 to be negative velocity 0.5 to be zero and 1 to be positive velocity)
-        u_left, u_right    = drive_mixer(self.drive_speed,self.turn_speed)
+        # u_left, u_right    = drive_mixer(self.drive_speed,self.turn_speed)
+        drive_speed_ = clip(self.drive_speed,-0.7,0.7)
+        turn_speed_  = clip(self.turn_speed,-0.3,0.3)
+        u_left  = drive_speed_ + turn_speed_
+        u_right = drive_speed_  - turn_speed_
         u_left_normalized  = (u_left + 1.0)/2.0
         u_right_normalized = -(u_right + 1.0)/2.0
 
@@ -167,6 +140,7 @@ class MPCSim(MPCBase):
         self.input[0]  = max_dx * msg.pitch
         self.input[1]  = max_dy * msg.roll
         self.input[2]  = max_dz * -msg.throttle
+        self.input[3]  = max_dpsi * msg.yaw
 
 def main(args=None):
     rclpy.init(args=args)

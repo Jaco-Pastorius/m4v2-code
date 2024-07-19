@@ -33,7 +33,7 @@ from morphing_lander.mpc.mpc                 import create_ocp_solver_descriptio
 from morphing_lander.mpc.mpc                 import create_ocp_solver_description_near_ground
 from morphing_lander.mpc.mpc                 import create_ocp_solver_description_with_int
 from morphing_lander.mpc.trajectories        import traj_jump_time 
-from morphing_lander.mpc.utils               import euler_from_quaternion, z_schedule
+from morphing_lander.mpc.utils               import euler_from_quaternion, z_schedule, distance_ground_robot
 from morphing_lander.mpc.parameters          import params_
 
 # Get parameters
@@ -41,7 +41,8 @@ queue_size                  = params_.get('queue_size')
 N_horizon                   = params_.get('N_horizon')
 Ts                          = params_.get('Ts')
 u_max                       = params_.get('u_max')
-land_height                 = params_.get('land_height')
+z_ground_base               = params_.get('z_ground_base')
+land_tolerance              = params_.get('land_tolerance')
 takeoff_height              = params_.get('takeoff_height')
 max_tilt_in_flight          = params_.get('max_tilt_in_flight')
 max_tilt_on_land            = params_.get('max_tilt_on_land')
@@ -61,7 +62,7 @@ model_states_out_idx        = params_.get('model_states_out_idx')
 model_ninputs               = params_.get('model_ninputs')
 model_noutputs              = params_.get('model_noutputs')
 integral_gain               = params_.get('integral_gain')
-near_ground_height          = params_.get('near_ground_height')
+z_star                      = params_.get('z_star')
 T_max                       = params_.get('T_max')
 m                           = params_.get('m')
 gravity                     = params_.get('g')
@@ -75,6 +76,12 @@ Q_mat_near_ground           = params_.get('Q_mat_near_ground')
 R_mat_near_ground           = params_.get('R_mat_near_ground')
 Q_mat_terminal_near_ground  = params_.get('Q_mat_terminal_near_ground')
 cost_update_freq            = params_.get('cost_update_freq')
+initial_tilt_sim            = params_.get('initial_tilt_sim')
+max_dx                      = params_['max_dx']
+max_dy                      = params_['max_dy']
+max_dz                      = params_['max_dz']
+max_dpsi                    = params_['max_dpsi']
+tilt_height                 = params_['tilt_height']
 
 class MPCBase(Node,ABC): 
     def __init__(self):
@@ -113,6 +120,8 @@ class MPCBase(Node,ABC):
         self.takeoff_flag     = False
         self.mission_done     = False
         self.in_transition    = False
+        self.near_ground_flag = False
+        self.grounded_flag    = False
         self.u_ref_star       = np.zeros(4)
 
         # robot state
@@ -121,8 +130,11 @@ class MPCBase(Node,ABC):
         self.integral_state   = 0.0
         self.u_opt_prev       = np.zeros(4)
 
+        # manual control input
+        self.input = np.zeros(4) # vx, vy, vz, vyaw
+
         # tilt angle
-        self.tilt_angle       = 0.0
+        self.tilt_angle       = initial_tilt_sim
 
         # drive speed and turn speed
         self.drive_speed      = 0.0
@@ -217,8 +229,13 @@ class MPCBase(Node,ABC):
             # check if robot has taken off
             self.takeoff_detector(x_current)
 
+            # compute distance from ground to wheels
+            z_ground_robot = distance_ground_robot(x_current,phi_current)
+
             # check if robot is grounded
-            grounded_flag = self.ground_detector(x_current)
+            grounded_flag,near_ground_flag = self.ground_detector(z_ground_robot)
+            self.grounded_flag = grounded_flag
+            self.near_ground_flag = near_ground_flag
 
             # check if mission has finished
             self.mission_done_detector(grounded_flag)
@@ -233,35 +250,40 @@ class MPCBase(Node,ABC):
                 mpc_flag         = False   
                 # self.disarm()
 
-            # check if robot is near ground
-            near_ground_flag = self.near_ground_detector(x_current)
-
             # check if robot is in transition
             self.in_transition_detector(near_ground_flag)
 
             # run mpc
             f_z,alpha = 1.0,1.0
-            outputs = np.zeros(5)
+            outputs = np.zeros(4)
             if mpc_flag: 
                 # adapt the cost function based on the tilt angle and height but only if robot has taken off
                 if self.takeoff_flag:
-                    f_z   = z_schedule(x_current[2],near_ground_height,1.0)
+                    f_z   = z_schedule(x_current[2],z_star,z_ground_base)
                     alpha = f_z * np.cos(self.tilt_angle)
+                else:
+                    alpha = np.cos(self.tilt_angle)
 
-                if self.in_transition and use_rl_for_transition:
-                    u_opt,tilt_vel,comp_time,outputs = self.rl_update(x_current_rl,phi_current)
+                if self.in_transition:
+                    # overwrite u_ref with the desired near ground thrust
+                    self.u_ref_star = np.clip(self.u_ref_star - Ts*u_ramp_down_rate,0.0,1.0)
+                    u_ref = self.u_ref_star * np.ones(4)
+
+                    # also make sure the robot is descending
+                    x_ref[8] = 0.5  # 0.5 m/s downwards
+                
+                if not self.takeoff_flag and self.tilt_angle >= max_tilt_in_flight:
+                    u_opt = np.zeros(4,dtype='float')
+                    comp_time = 0.0
                     x_next = np.zeros(12)
-                else: 
-                    if self.in_transition:
-                        # overwrite u_ref with the desired near ground thrust
-                        self.u_ref_star = np.clip(self.u_ref_star - Ts*u_ramp_down_rate,0.0,1.0)
-                        u_ref = self.u_ref_star * np.ones(4)
+                else:
                     # run mpc
                     u_opt,x_next,comp_time = self.mpc_update(x_current,phi_current,x_ref,u_ref,alpha)
                     # u_opt,x_next,comp_time = self.mpc_update_with_int(x_current,phi_current,x_ref,u_ref,self.integral_state)
+                    
             else:
                 u_opt = np.zeros(4,dtype='float')
-                comp_time = -1.0
+                comp_time = 0.0
                 x_next = np.zeros(12)
                 alpha = 0.0
 
@@ -274,7 +296,7 @@ class MPCBase(Node,ABC):
             tilt_vel = self.limit_tilt_vel(tilt_vel,self.mission_done,near_ground_flag)
 
             # limit drive velocity to ensure safety
-            drive_vel = self.limit_drive_vel(drive_vel,grounded_flag)
+            drive_vel = self.limit_drive_vel(drive_vel)
 
             # publish tilt velocity
             self.publish_tilt_vel(tilt_vel)
@@ -306,10 +328,12 @@ class MPCBase(Node,ABC):
                              self.mission_done,
                              self.takeoff_flag,
                              alpha,
-                             outputs)
+                             outputs,
+                             z_ground_robot,
+                             drive_vel)
 
     # log publisher
-    def publish_log(self,x,u,x_ref,u_ref,tilt_angle,tilt_vel,status,comptime,tracking_done,grounded_flag,x_next,near_ground_flag,in_transition,mission_done,takeoff_flag,alpha,outputs):
+    def publish_log(self,x,u,x_ref,u_ref,tilt_angle,tilt_vel,status,comptime,tracking_done,grounded_flag,x_next,near_ground_flag,in_transition,mission_done,takeoff_flag,alpha,outputs,z_ground_robot,drive_vel):
         msg = MPCStatus()
 
         msg.x = x.astype('float32')
@@ -324,7 +348,10 @@ class MPCBase(Node,ABC):
         msg.varphi  = np.rad2deg(tilt_angle)
         msg.tiltvel = np.rad2deg(tilt_vel)
 
+        msg.zgroundrobot = z_ground_robot
+
         msg.outputs = outputs.astype('float32')
+        msg.drivevel = drive_vel
 
         msg.status = status
         msg.comptime = comptime
@@ -470,23 +497,27 @@ class MPCBase(Node,ABC):
         u_rl = rl_model.postprocess_actions(outputs)
 
         # get desired tilt velocity
-        tilt_vel = u_rl[-1].astype(np.float32) 
+        # tilt_vel = u_rl[-1].astype(np.float32) 
 
         # get control input for px4
-        u_opt = u_rl[:-1]
+        u_opt = u_rl
+        # u_opt = u_rl[:-1]
 
         # print computation time
         comp_time = time.process_time() - start_time
         print("* comp time = %5g seconds\n" % (comp_time))
         
-        return u_opt, float(tilt_vel), comp_time, outputs
+        # return u_opt, float(tilt_vel), comp_time, outputs
+        return u_opt, comp_time, outputs
 
     # detector methods
-    def ground_detector(self,x_current):
-        grounded_flag = False
-        if np.absolute(x_current[2])<np.absolute(land_height):
+    def ground_detector(self,z_ground_robot):
+        grounded_flag, near_ground_flag = False, False
+        if np.absolute(z_ground_robot) <= np.absolute(z_star):
+            near_ground_flag = True
+        if np.absolute(z_ground_robot)<np.absolute(z_ground_base)+np.absolute(land_tolerance):
             grounded_flag = True
-        return grounded_flag
+        return grounded_flag, near_ground_flag
 
     def takeoff_detector(self,x_current):
         if (np.absolute(x_current[2])>np.absolute(takeoff_height)) and (not self.takeoff_flag):
@@ -495,12 +526,6 @@ class MPCBase(Node,ABC):
     def mission_done_detector(self,grounded_flag):
         if self.takeoff_flag and grounded_flag and (not self.mission_done):
             self.mission_done = True
-
-    def near_ground_detector(self,x_current):
-        near_ground_flag = False
-        if np.absolute(x_current[2])<np.absolute(near_ground_height):
-            near_ground_flag = True
-        return near_ground_flag
 
     def in_transition_detector(self,near_ground_flag):
         if near_ground_flag and self.takeoff_flag and (not self.in_transition):
@@ -520,8 +545,8 @@ class MPCBase(Node,ABC):
                 tilt_vel = 0.0
         return tilt_vel
 
-    def limit_drive_vel(self,drive_vel,grounded_flag):
-        if (not self.in_transition) and not self.mission_done:
+    def limit_drive_vel(self,drive_vel):
+        if not self.near_ground_flag:
             drive_vel = [0.0,0.0]
         return drive_vel
 
@@ -554,6 +579,58 @@ class MPCBase(Node,ABC):
             self.offboard = True
         if (self.offboard_setpoint_counter_ < 11):
             self.offboard_setpoint_counter_ += 1
+
+    def get_reference(self):
+        # initial drive velocity state and input references
+        drive_vel = [0.0,0.0]
+        x_ref = np.zeros(12)
+        u_ref = np.zeros(4)
+
+        # get heading rotation matrix
+        heading = self.state[3]
+        cpsi = np.cos(heading)
+        spsi = np.sin(heading)
+
+        R = np.array([
+            [cpsi, -spsi],
+            [spsi, cpsi]
+        ])
+
+        vbody = np.array([self.input[0],self.input[1]])
+        v = R @ vbody
+
+        # write state reference
+        x_ref[0] = self.state[0] + v[0]
+        x_ref[1] = self.state[1] + v[1]
+        x_ref[2] = self.state[2] + self.input[2]
+
+        x_ref[3] = self.state[3] + self.input[3]
+
+        x_ref[6] = v[0]
+        x_ref[7] = v[1]
+        x_ref[8] = self.input[2]
+
+        x_ref[11] = self.input[3]
+
+        # write drive velocity
+        drive_vel[0] = self.input[0]/max_dx
+        drive_vel[1] = self.input[1]/max_dy
+
+        # write tilt velocity according to stage of mission
+        if not self.mission_done:
+            if self.takeoff_flag and abs(self.state[2]) < abs(tilt_height):
+                tilt_vel = 1.0
+            else:
+                if self.grounded_flag and self.input[2]/max_dz <= -0.7:
+                    tilt_vel = -1.0
+                else:
+                    tilt_vel = 0.0
+                if not self.near_ground_flag:
+                    tilt_vel = -1.0
+        else:
+            tilt_vel = 1.0
+
+        return x_ref, u_ref, tilt_vel, drive_vel
 
     # subscription callbacks
     def tilt_angle_callback(self, msg):
@@ -626,10 +703,6 @@ class MPCBase(Node,ABC):
         pass
     
     @abstractmethod
-    def get_reference(self):
-        pass
-
-    @abstractmethod
     def publish_actuator_motors(self):
         pass
 
@@ -650,3 +723,10 @@ class MPCBase(Node,ABC):
     #     self.acados_ocp_solver.set(N_horizon, "p", np.hstack((phicurrent,l4c_params.squeeze())))
     # else:
     #     self.acados_ocp_solver.set(N_horizon, "p", np.array([phicurrent]))
+
+                # if self.in_transition and use_rl_for_transition:
+                #     u_opt,comp_time,outputs = self.rl_update(x_current_rl,phi_current)
+                #     # u_opt,tilt_vel,comp_time,outputs = self.rl_update(x_current_rl,phi_current)
+                #     outputs = outputs[0][0].squeeze()
+                #     x_next = np.zeros(12)
+                # else: 

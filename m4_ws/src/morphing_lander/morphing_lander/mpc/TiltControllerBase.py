@@ -14,6 +14,7 @@ from morphing_lander.mpc.parameters import params_
 
 Ts_tilt_controller = params_['Ts_tilt_controller']
 queue_size         = params_['queue_size']
+initial_tilt_sim   = params_.get('initial_tilt_sim')
 
 class TiltControllerBase(Node,ABC): 
     def __init__(self):
@@ -35,7 +36,7 @@ class TiltControllerBase(Node,ABC):
         self.timer_ = self.create_timer(self.Ts, self.timer_callback)
 
         # tilt angle and tilt velocity
-        self.tilt_angle = 0.0
+        self.tilt_angle = initial_tilt_sim
         self.tilt_vel   = 0.0
 
     # timer callback

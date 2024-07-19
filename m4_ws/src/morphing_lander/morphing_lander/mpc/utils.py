@@ -3,8 +3,11 @@ from scipy.interpolate import interp1d
 from scipy.spatial.transform import Rotation as R
 from morphing_lander.mpc.parameters import params_
 
-wheel_base   = params_.get('wheel_base')
-wheel_radius = params_.get('wheel_radius')
+varphi_g      = params_.get('varphi_g')
+l_pivot_wheel = params_.get('l_pivot_wheel')
+h_bot_pivot   = params_.get('h_bot_pivot')
+wheel_base    = params_.get('wheel_base')
+wheel_radius  = params_.get('wheel_radius')
 
 def euler_from_quaternion(quaternion):
     """
@@ -71,11 +74,27 @@ def theta_fit(varphi):
     # theta as a function of varphi fit from matlab kinematics script
     return -0.5988*varphi**4 + 1.55*varphi**3 - 1.69*varphi**2 + 0.3304*varphi + 1.439
 
-def z_schedule(z,zstar,eps):
-    z,zstar,eps = abs(z),abs(zstar),abs(eps)
-    if z >= (1+eps)*zstar:
+# def z_schedule(z,zstar,eps):
+#     z,zstar,eps = abs(z),abs(zstar),abs(eps)
+#     if z >= (1+eps)*zstar:
+#         return 1.0
+#     elif zstar <= z <= (1+eps)*zstar:
+#         return 1 - zstar/z
+#     else:
+#         return 0.0
+    
+def z_schedule(z,zstar,zg):
+    z,zstar,zg = abs(z),abs(zstar),abs(zg)
+    if z >= zstar:
         return 1.0
-    elif zstar <= z <= (1+eps)*zstar:
-        return 1 - zstar/z
+    elif zg <= z <= zstar:
+        return (z - zg)/(zstar - zg)
     else:
         return 0.0
+
+def distance_ground_robot(x_current, phi_current):
+    z_base = abs(x_current[2]) 
+    dH     = 0.0
+    if (varphi_g <= phi_current <= np.pi/2):
+        dH = l_pivot_wheel*np.sin(phi_current) - h_bot_pivot
+    return -(z_base - dH)

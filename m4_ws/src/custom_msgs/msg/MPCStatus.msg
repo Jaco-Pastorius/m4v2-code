@@ -6,9 +6,12 @@ float32[12] xnext
 
 float32[4]  u
 float32[4]  uref
-float32[5]  outputs
+
+float32[4] outputs
 
 float32 alpha
+
+float32 zgroundrobot
 
 float32     varphi
 float32     tiltvel

@@ -22,7 +22,7 @@ dead           = params_.get('dead')
 max_dx         = params_.get('max_dx')
 max_dy         = params_.get('max_dy')
 max_dz         = params_.get('max_dz')
-tilt_height    = params_.get('tilt_height')
+max_dpsi       = params_.get('max_dpsi')
 
 class MPCHardware(MPCBase): 
     def __init__(self):
@@ -49,42 +49,11 @@ class MPCHardware(MPCBase):
         self.offboard_switch = False
         self.mpc_switch      = False
 
-        # control input
-        self.input       = zeros(4) # vx, vy, vz, x
-
     def mpc_trigger(self):
         return self.mpc_switch
         
     def offboard_mode_trigger(self):
         return self.offboard_switch
-    
-    def get_reference(self):
-        drive_vel = [0.0,0.0]
-        x_ref = zeros(12)
-        u_ref = zeros(4)
-
-        x_ref[0] = self.state[0] + self.input[0]
-        x_ref[1] = self.state[1] + self.input[1]
-        x_ref[2] = self.state[2] + self.input[2]
-
-        x_ref[6] = self.input[0]
-        x_ref[7] = self.input[1]
-        x_ref[8] = self.input[2]
-
-        if not self.mission_done:
-            if self.takeoff_flag and abs(self.state[2]) < abs(tilt_height):
-                tilt_vel = 1.0
-            else:
-                tilt_vel = -1.0
-            if self.in_transition:
-                drive_vel[0] = self.input[0]/max_dx
-                drive_vel[1] = self.input[1]/max_dy
-        else:
-            drive_vel[0] = self.input[0]/max_dx
-            drive_vel[1] = self.input[1]/max_dy
-            tilt_vel = 1.0
-
-        return x_ref, u_ref, tilt_vel, drive_vel
     
     def vehicle_odometry_callback(self, msg): 
         # get state from odometry
@@ -110,6 +79,7 @@ class MPCHardware(MPCBase):
         self.input[0]  = max_dx * -(msg.values[1]-dead)/(max-dead)
         self.input[1]  = max_dy *  (msg.values[0]-dead)/(max-dead)
         self.input[2]  = max_dz * -(msg.values[2]-dead)/(max-dead)
+        self.input[3]  = max_dpsi * -(msg.values[3]-dead)/(max-dead)
 
     def publish_actuator_motors(self,u):
         # publish to px4

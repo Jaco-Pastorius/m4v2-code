@@ -34,22 +34,22 @@ class ONNXModel:
        return outputs
    
    def postprocess_actions(self, outputs):
-       new_outputs = np.zeros((1, 3, 5), dtype=np.float32)
+    #    new_outputs = np.zeros((1, 3, 5), dtype=np.float32)
+       new_outputs = np.zeros((1, 3, 4), dtype=np.float32)
        new_outputs[0][0][0] = np.clip(outputs[0][0][0], -1, 1)
        new_outputs[0][0][1] = np.clip(outputs[0][0][1], -1, 1)
        new_outputs[0][0][2] = np.clip(outputs[0][0][2], -1, 1)
        new_outputs[0][0][3] = np.clip(outputs[0][0][3], -1, 1)
-       new_outputs[0][0][4] = np.clip(outputs[0][0][4], -1, 1)
+    #    new_outputs[0][0][4] = np.clip(outputs[0][0][4], -1, 1)
        
        new_outputs[0][0][0] = (new_outputs[0][0][0] + 1) / 2
        new_outputs[0][0][1] = (new_outputs[0][0][1] + 1) / 2
        new_outputs[0][0][2] = (new_outputs[0][0][2] + 1) / 2
        new_outputs[0][0][3] = (new_outputs[0][0][3] + 1) / 2
-       # fifth action : set to 0 if between -0.25 and 0.25, if higher than 0.25 set to 1, if lower than -0.25 set to -1
-       new_outputs[0][0][4] = 0 if -0.25 < new_outputs[0][0][4] < 0.25 else np.sign(new_outputs[0][0][4])
-    #    print(f"new_outputs : {new_outputs}")
-    #    test = new_outputs[0][0].squeeze()
-    #    print(f"new_outputs 1  : {test}")
+
+    #    fifth action : set to 0 if between -0.25 and 0.25, if higher than 0.25 set to 1, if lower than -0.25 set to -1
+    #    new_outputs[0][0][4] = 0 if -0.25 < new_outputs[0][0][4] < 0.25 else 0.95*np.sign(new_outputs[0][0][4])
+    #    new_outputs[0][0][4] = -new_outputs[0][0][4]   
        return new_outputs[0][0].squeeze()
 
 # declare parameter dictionary
@@ -61,7 +61,7 @@ params_['Ts_tilt_controller']    = params_.get('Ts')              # control freq
 params_['Ts_drive_controller']   = params_.get('Ts')              # control frequency of DriveController
 params_['queue_size']            = 1                              # queue size of ros2 messages
 params_['warmup_time']           = 1.0                            # time after which mpc controller is started (seconds)
-params_['cost_update_freq']      = 0.07                           # frequency at which cost is updated (seconds)
+params_['cost_update_freq']      = 0.007                           # frequency at which cost is updated (seconds)
 
 # generate and build flags
 params_['generate_mpc']          = False
@@ -71,7 +71,9 @@ params_['build_mpc']             = False
 params_['max_dx']                = 1.0                            # max x velocity
 params_['max_dy']                = 1.0                            # max y velocity
 params_['max_dz']                = 0.75                           # max z velocity
-params_['tilt_height']           = -1.0                           # height at which tilt is enabled
+params_['max_dpsi']              = np.pi/4                        # max yaw angular velocity
+params_['tilt_height']           = -1.5                           # height at which tilt is enabled
+params_['initial_tilt_sim']      = 0.0                            # initial tilt angle in simulation (radian)
 
 # safety parameters
 params_['max_tilt_in_flight']    = np.deg2rad(50)
@@ -79,16 +81,17 @@ params_['max_tilt_on_land']      = np.deg2rad(85)
 
 # transition parameters
 params_['use_rl_for_transition'] = False
-params_['l_pivot_wheel']         = 0.26                           # distance from pivot point to wheel exterior
-params_['h_bot_pivot']           = 0.10                           # distance from bottom plate to pivot point
-params_['z_base_ground']         = -0.113                         # (exp: -0.113 TBD) height that optitrack registers when robot is on ground with arms at 0 degrees
-params_['h_wheel_ground']        = -0.20                          # distance from wheel to ground when transition begins
-params_['near_ground_height']    = params_.get('h_wheel_ground') + params_.get('z_base_ground') - (params_.get('l_pivot_wheel') * np.sin(params_.get('max_tilt_in_flight')) - params_.get('h_bot_pivot'))                
-params_['u_ramp_down_rate']      = 0.15                           # rate at which reference input ramps down
+params_['l_pivot_wheel']         = 0.261                                                                                 # distance from pivot point to wheel exterior (look at y distance in SDF and add radius of wheel (0.125))
+params_['h_bot_pivot']           = 0.094                                                                                 # distance from bottom plate to pivot point (look at z distance in SDF)
+params_['varphi_g']              = np.arctan(params_.get('h_bot_pivot')/params_.get('l_pivot_wheel'))                    # angle of pivot point when robot is on ground and wheels just touch the ground
+params_['z_ground_base']         = -0.0                                                                                # (exp: -0.113 TBD) height that optitrack registers when robot is on ground with arms at 0 degrees
+params_['h_wheel_ground']        = -0.2         # distance from wheel to ground when transition begins                                                 
+params_['z_star']                = params_.get('h_wheel_ground') + params_.get('z_ground_base') - (params_.get('l_pivot_wheel') * np.sin(params_.get('max_tilt_in_flight')) - params_.get('h_bot_pivot'))                
+params_['u_ramp_down_rate']      = 0.15                                                                                  # rate at which reference input ramps down
 
 # state machine parameters
-params_['land_height']           = -0.23                          # (exp: -0.23, sim:-0.12) height at which we consider robot landed 
-params_['takeoff_height']        = -1.0                           # (exp: -1.0) height at which we consider robot in flight
+params_['land_tolerance']        = -0.03                          # tolerance to consider robot landed
+params_['takeoff_height']        = -2.0                           # (exp: -1.0) height at which we consider robot in flight
 
 # trajectory parameters
 params_['z0']                    = 0.0                            # (exp: -0.11)
@@ -123,7 +126,7 @@ params_['acados_ocp_path_hybrid']        = getenv("HOME") +'/m4v2-code/m4_ws/src
 params_['acados_sim_path_hybrid']        = getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/acados/acados_sims_hybrid/'
 
 # path of RL model
-params_['rl_model']                      = ONNXModel(getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/rl/MorphingLander.onnx')
+params_['rl_model']                      = ONNXModel(getenv("HOME") +'/m4v2-code/m4_ws/src/morphing_lander/morphing_lander/mpc/rl/MorphingLander2.onnx')
 
 # roboclaw addresses
 params_['tilt_roboclaw_address']         = "/dev/ttyACM1"
@@ -232,11 +235,11 @@ params_['w_z_near_ground']        = 0.0   # exp: ?  TBD
 params_['w_dx_near_ground']       = 0.0   # exp: ?  TBD
 params_['w_dy_near_ground']       = 0.0   # exp: ?  TBD
 params_['w_dz_near_ground']       = 0.0   # exp: ?  TBD
-params_['w_phi_near_ground']      = 0.1   # exp: ?  TBD
-params_['w_th_near_ground']       = 0.1   # exp: ?  TBD
-params_['w_psi_near_ground']      = 0.1   # exp: ?  TBD  
+params_['w_phi_near_ground']      = 0.0   # exp: ?  TBD
+params_['w_th_near_ground']       = 0.0   # exp: ?  TBD
+params_['w_psi_near_ground']      = 0.0   # exp: ?  TBD  
 params_['w_ox_near_ground']       = 3.0   # exp: ?  TBD
-params_['w_oy_near_ground']       = 10.0  # exp: ?  TBD
+params_['w_oy_near_ground']       = 5.0   # exp: ?  TBD
 params_['w_oz_near_ground']       = 1.5   # exp: ?  TBD
 params_['w_u_near_ground']        = 1.0   # exp: ?  TBD
 params_['rho_near_ground']        = 0.1   # exp: ?  TBD
